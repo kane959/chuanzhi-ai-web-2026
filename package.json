@@ -1,0 +1,14 @@
+{
+  "name": "campusflow-chuanzhi-prep",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --dir prototype dev",
+    "build": "pnpm --dir prototype build",
+    "typecheck": "pnpm --dir prototype check",
+    "lint": "node scripts/lint.mjs",
+    "test:e2e": "node tests/smoke.mjs",
+    "preflight": "python C:/Users/ThinkPad/.codex/skills/chuanzhi-ai-web-contest/scripts/check_submission.py ."
+  }
+}
