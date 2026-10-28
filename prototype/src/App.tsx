@@ -5,14 +5,15 @@ import {
   Paperclip, Play, RefreshCw, Search, ShieldCheck, Sparkles, X,
 } from 'lucide-react'
 import { evidence, evidenceById, initialTasks, packNotice, quickPrompts } from './data'
-import { createChecklist, matchTaskIds, missingRequired, retrieveEvidence, scheduleTasks } from './lib/planner'
+import { createChecklist, matchTaskIds, missingRequired, retrieveEvidence, reviewPlan, scheduleTasks } from './lib/planner'
 import { restoreProgress, saveProgress } from './lib/storage'
-import type { Availability, Evidence, RetrievalHit, ScheduledTask, Task, TraceEvent } from './types'
+import type { Availability, Evidence, RetrievalHit, ReviewResult, ScheduledTask, Task, TraceEvent } from './types'
 
 const stages = [
   { label: '理解目标', icon: Sparkles },
   { label: '召回依据', icon: Search },
   { label: '排期检查', icon: CalendarDays },
+  { label: 'Reviewer 审核', icon: ShieldCheck },
   { label: '等待确认', icon: ClipboardCheck },
 ]
 
@@ -25,6 +26,7 @@ function App() {
   const [selectedTaskId, setSelectedTaskId] = useState('repair')
   const [selectedEvidenceId, setSelectedEvidenceId] = useState('E-03')
   const [retrievalHits, setRetrievalHits] = useState<RetrievalHit[]>([])
+  const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null)
   const [hasRun, setHasRun] = useState(false)
   const [noEvidence, setNoEvidence] = useState(false)
   const [notice, setNotice] = useState('本地演示已就绪。输入一个目标，看看它如何变成可执行的周计划。')
@@ -92,8 +94,10 @@ function App() {
     const matchedTaskIds = matchTaskIds(prompt)
     const firstMatched = matchedTaskIds[0] ?? selectedTaskId
     const matchedTask = tasks.find((task) => task.id === firstMatched) ?? selectedTask
+    const plannedSchedule = scheduleTasks(tasks, availability)
+    const review = reviewPlan(prompt, tasks, plannedSchedule, hits, matchedTaskIds)
     timerRefs.current.forEach((timer) => window.clearTimeout(timer))
-    setRetrievalHits(hits); setHasRun(true); setNoEvidence(hits.length === 0 || matchedTaskIds.length === 0)
+    setRetrievalHits(hits); setReviewResult(review); setHasRun(true); setNoEvidence(hits.length === 0 || matchedTaskIds.length === 0)
     setSelectedTaskId(matchedTask.id)
     setSelectedEvidenceId(hits.find((hit) => matchedTask.evidence.includes(hit.evidence.id))?.evidence.id ?? matchedTask.evidence[0])
     setRunning(true); setStage(1)
@@ -101,7 +105,8 @@ function App() {
     timerRefs.current = [
       window.setTimeout(() => { setStage(2); setNotice(hits.length ? '已按关键词相关度排序 ' + hits.length + ' 条资料，保留原文定位。' : '检索结果为空，没有依据就不生成确定结论。') }, 550),
       window.setTimeout(() => { setStage(3); setNotice('正在检查开放时间、材料依赖和可用时段。') }, 1100),
-      window.setTimeout(() => { setStage(4); setRunning(false); setNotice(hits.length ? '计划已准备好。请检查冲突与材料，再决定是否导出。' : '已完成保守检查。请补充通知或办理事项后再生成计划。') }, 1700),
+      window.setTimeout(() => { setStage(4); setNotice(review.status === 'blocked' ? 'Reviewer 已阻止确定性结论，请补充可核验依据。' : review.status === 'needs_review' ? 'Reviewer 标记了需要人工确认的事项。' : 'Reviewer 已通过基础检查，仍请在导出前复核。') }, 1450),
+      window.setTimeout(() => { setStage(5); setRunning(false); setNotice(hits.length ? '计划已准备好。请检查审核结果、冲突与材料，再决定是否导出。' : '已完成保守检查。请补充通知或办理事项后再生成计划。') }, 1950),
     ]
   }
   async function handleUpload(file?: File) {
@@ -116,7 +121,7 @@ function App() {
   }
   function resetDemo() {
     setTasks(initialTasks); setPrompt(quickPrompts[0].text); setAvailability('afternoon'); setStage(0)
-    setRetrievalHits([]); setHasRun(false); setNoEvidence(false); setSelectedTaskId('repair'); setSelectedEvidenceId('E-03')
+    setRetrievalHits([]); setReviewResult(null); setHasRun(false); setNoEvidence(false); setSelectedTaskId('repair'); setSelectedEvidenceId('E-03')
     setNotice('演示已重置。你的本地进度也已清空。')
     try { localStorage.removeItem('campusflow:progress:v2') } catch { /* private browsing can reject storage */ }
   }
@@ -131,8 +136,11 @@ function App() {
     { id: 'parse', label: '理解目标', detail: '提取事项与时间约束', state: 'done' },
     { id: 'retrieve', label: '召回依据', detail: hasRun ? retrievalHits.length + ' 条资料' : '等待输入', state: noEvidence ? 'warning' : 'done' },
     { id: 'schedule', label: '排期检查', detail: availability === 'evening' ? '检测晚间窗口' : '检查可用时间', state: schedule.some((item) => item.conflict) ? 'warning' : 'done' },
+    { id: 'review', label: 'Reviewer 审核', detail: reviewResult ? (reviewResult.status === 'pass' ? '基础检查通过' : reviewResult.status === 'blocked' ? '阻止确定性结论' : '需要人工确认') : '等待运行', state: reviewResult?.status === 'pass' ? 'done' : reviewResult ? 'warning' : 'done' },
     { id: 'confirm', label: '等待确认', detail: '导出前由你决定', state: 'done' },
   ]
+  const reviewerLabel = reviewResult?.status === 'pass' ? '已通过' : reviewResult?.status === 'blocked' ? '已阻止确定性结论' : '需要人工确认'
+  const reviewerLead = reviewResult?.findings[0]?.message ?? '未发现阻断项，导出前仍请核对真实通知。'
 
   return (
     <div className="app-shell">
@@ -158,7 +166,7 @@ function App() {
           <section className="workspace-grid" aria-label="计划工作台">
             <section className="input-panel panel"><div className="section-heading"><div><span className="section-index">01</span><div><span className="eyebrow">输入目标</span><h2>你想完成什么？</h2></div></div><span className="quiet-tag">自然语言</span></div><label className="sr-only" htmlFor="goal-input">行动目标</label><textarea id="goal-input" name="goal" value={prompt} onChange={(event) => setPrompt(event.target.value.slice(0, 500))} placeholder="例如：我周三下午有空，帮我安排报到和报修…" /><div className="input-footer"><button className="upload-button" onClick={() => fileRef.current?.click()}><Paperclip size={15} />上传通知 / 截图</button><input ref={fileRef} type="file" accept=".txt,.png,.jpg,.jpeg,.pdf" hidden onChange={(event) => { void handleUpload(event.target.files?.[0]); event.target.value = '' }} /><span>{prompt.length}/500</span></div><div className="prompt-list"><div className="prompt-list-heading"><span>快速开始</span><span>点击填入</span></div>{quickPrompts.map((item) => <button key={item.label} onClick={() => setPrompt(item.text)}><span>{item.label}</span><ChevronRight size={14} /></button>)}</div><div className="availability-field"><div><span className="eyebrow">时间约束</span><strong>我什么时候有空？</strong></div><div className="availability-toggle" role="group" aria-label="可用时间"><button className={availability === 'afternoon' ? 'selected' : ''} onClick={() => setAvailability('afternoon')}>周三下午</button><button className={availability === 'evening' ? 'selected' : ''} onClick={() => setAvailability('evening')}>只有晚上</button></div></div><button className="primary-button generate-button" onClick={runPlan} disabled={running}>{running ? <><RefreshCw size={16} className="spin" />正在查证与规划…</> : <><Sparkles size={16} />生成我的行动计划<ArrowRight size={16} /></>}</button><p className="privacy-note"><ShieldCheck size={15} /><span>{packNotice} 当前不需要 API Key。</span></p></section>
 
-            <section className="plan-panel panel"><div className="panel-topline"><div><span className="section-index">02</span><div><span className="eyebrow">Agent 规划</span><h2>{noEvidence ? '示例行动队列' : '我的行动队列'}</h2></div></div><div className="plan-head-actions"><span className="plan-mode">演示规则</span><button className="more-button" aria-label="取消或重新生成计划" onClick={running ? stopPlanning : runPlan}>{running ? <X size={15} /> : <RefreshCw size={15} />}</button></div></div><div className="plan-summary"><div><strong>{tasks.length} 个行动</strong><span>预计 {Math.floor(tasks.reduce((sum, task) => sum + task.duration, 0) / 60)} 小时 {tasks.reduce((sum, task) => sum + task.duration, 0) % 60} 分</span></div><div className="plan-constraint"><Clock3 size={14} />{availability === 'evening' ? '仅晚上有空' : '周三下午有空'}</div></div><div className="agent-trace" aria-label="Agent 工作阶段">{stages.map((item, index) => { const Icon = item.icon; const active = stage >= index + 1; const event = trace[index]; return <div className={active ? 'trace-item active' : 'trace-item'} key={item.label}><div className="trace-icon">{event.state === 'warning' ? <CircleAlert size={14} /> : active && stage > index + 1 ? <Check size={14} /> : <Icon size={14} />}</div><span>{item.label}</span><small>{event.detail}</small></div> })}</div>{noEvidence && <><div className="no-evidence-banner"><CircleAlert size={17} /><div><strong>暂未找到足够依据</strong><p>系统不会为通用问题编造校园事实。补充通知、办理事项或截止时间后再试。</p></div></div><div className="stale-plan-note">下面保留上一份示例计划，未针对当前输入更新。补充依据后再生成。</div></>}<div className="task-list">{schedule.map((item, index) => <TaskCard key={item.task.id} item={item} index={index} selected={selectedTask.id === item.task.id} onSelect={selectTask} onToggle={updateTaskStatus} />)}</div><div className="plan-footer"><div className="footer-stat"><strong>{completedMaterials}<small>/{totalMaterials}</small></strong><span>材料已核对</span></div><div className="footer-stat"><strong>{tasks.filter((task) => task.evidence.length).length}<small>/{tasks.length}</small></strong><span>行动有依据</span></div><button className="secondary-button" onClick={() => setExportOpen(true)}><Download size={14} />导出清单</button></div></section>
+            <section className="plan-panel panel"><div className="panel-topline"><div><span className="section-index">02</span><div><span className="eyebrow">Agent 规划</span><h2>{noEvidence ? '示例行动队列' : '我的行动队列'}</h2></div></div><div className="plan-head-actions"><span className="plan-mode">演示规则</span><button className="more-button" aria-label="取消或重新生成计划" onClick={running ? stopPlanning : runPlan}>{running ? <X size={15} /> : <RefreshCw size={15} />}</button></div></div><div className="plan-summary"><div><strong>{tasks.length} 个行动</strong><span>预计 {Math.floor(tasks.reduce((sum, task) => sum + task.duration, 0) / 60)} 小时 {tasks.reduce((sum, task) => sum + task.duration, 0) % 60} 分</span></div><div className="plan-constraint"><Clock3 size={14} />{availability === 'evening' ? '仅晚上有空' : '周三下午有空'}</div></div><div className="agent-trace" aria-label="Agent 工作阶段">{stages.map((item, index) => { const Icon = item.icon; const active = stage >= index + 1; const event = trace[index]; return <div className={active ? 'trace-item active' : 'trace-item'} key={item.label}><div className="trace-icon">{event.state === 'warning' ? <CircleAlert size={14} /> : active && stage > index + 1 ? <Check size={14} /> : <Icon size={14} />}</div><span>{item.label}</span><small>{event.detail}</small></div> })}</div>{reviewResult && <div className={'review-banner ' + reviewResult.status} role="status"><div className="review-banner-icon">{reviewResult.status === 'pass' ? <ShieldCheck size={17} /> : <CircleAlert size={17} />}</div><div className="review-banner-copy"><div className="review-banner-heading"><strong>Reviewer · {reviewerLabel}</strong><span>{reviewResult.checkedTaskIds.length} 项行动 · {reviewResult.checkedEvidenceIds.length} 条依据</span></div><p>{reviewerLead}</p>{reviewResult.findings.length > 1 && <small>还有 {reviewResult.findings.length - 1} 项检查结果，展开详情前请先人工核对。</small>}</div></div>}{noEvidence && <><div className="no-evidence-banner"><CircleAlert size={17} /><div><strong>暂未找到足够依据</strong><p>系统不会为通用问题编造校园事实。补充通知、办理事项或截止时间后再试。</p></div></div><div className="stale-plan-note">下面保留上一份示例计划，未针对当前输入更新。补充依据后再生成。</div></>}<div className="task-list">{schedule.map((item, index) => <TaskCard key={item.task.id} item={item} index={index} selected={selectedTask.id === item.task.id} onSelect={selectTask} onToggle={updateTaskStatus} />)}</div><div className="plan-footer"><div className="footer-stat"><strong>{completedMaterials}<small>/{totalMaterials}</small></strong><span>材料已核对</span></div><div className="footer-stat"><strong>{tasks.filter((task) => task.evidence.length).length}<small>/{tasks.length}</small></strong><span>行动有依据</span></div><button className="secondary-button" onClick={() => setExportOpen(true)}><Download size={14} />导出清单</button></div></section>
 
             <aside className="detail-panel panel" id="detail-panel"><div className="detail-heading"><div><span className="section-index">03</span><div><span className="eyebrow">当前事项</span><h2>{selectedTask.title}</h2></div></div><span className={selectedSchedule.conflict ? 'conflict-tag' : 'ready-tag'}>{selectedSchedule.conflict ? '待协调' : '可安排'}</span></div><div className="selected-schedule"><div className="schedule-icon"><CalendarDays size={17} /></div><div><strong>{selectedSchedule.day} · {selectedSchedule.time}</strong><span><MapPin size={13} />{selectedTask.location}</span></div></div><div className="detail-reason"><Info size={15} /><p>{selectedSchedule.reason}</p></div><div className="detail-section"><div className="detail-section-title"><strong>材料清单</strong><span>{selectedTask.materials.filter((item) => item.checked).length}/{selectedTask.materials.length}</span></div><div className="material-list">{selectedTask.materials.map((item) => <label className={item.checked ? 'material-row checked' : 'material-row'} key={item.id}><input type="checkbox" checked={item.checked} onChange={() => toggleMaterial(selectedTask.id, item.id)} /><span className="check-box">{item.checked && <Check size={12} />}</span><span>{item.label}</span>{item.required ? <em>必备</em> : <em className="optional">按需</em>}</label>)}</div></div><div className="detail-section evidence-section"><div className="detail-section-title"><strong>支持这一步的依据</strong><span>{relevantEvidence.length} 条</span></div><div className="evidence-mini-list">{relevantEvidence.map((hit) => <button className={selectedEvidence.id === hit.evidence.id ? 'evidence-mini selected' : 'evidence-mini'} key={hit.evidence.id} onClick={() => setSelectedEvidenceId(hit.evidence.id)}><span className="evidence-mini-id">{hit.evidence.id}</span><span><strong>{hit.evidence.title}</strong><small>{hit.evidence.locator}</small></span><ChevronRight size={14} /></button>)}</div><button className="text-link" onClick={() => setDrawerEvidence(selectedEvidence)}><FileText size={14} />打开原文定位<ExternalLink size={13} /></button></div><div className="confirm-note"><ShieldCheck size={16} /><span>提交、写入日历和发送提醒都需要你的确认。</span></div></aside>
           </section>

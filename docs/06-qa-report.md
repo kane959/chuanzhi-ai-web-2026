@@ -35,3 +35,10 @@
 - 当前结果是可解释的本地演示数据，不宣称已接入真实模型或真实学校系统。
 - Playwright 目前用于人工 CLI 走查；正式提交前将把同一检查点迁移为可重复的浏览器测试。
 - 需要补齐队伍、学校、指导教师、在线演示地址和真实知识包后，才能冻结提交材料。
+
+## 2026-10-28 · Reviewer 与固定评测复核
+
+- `pnpm typecheck`、`pnpm build`、`pnpm lint`、`pnpm test:e2e`、`pnpm preflight`：通过。
+- `pnpm evaluate`：CF-01 至 CF-08 全部通过；证据召回率、任务覆盖率、无依据拒答率和 Reviewer 安全率均为 1.000。
+- 浏览器复核：默认目标显示 `needs_review`；天气问题显示 `blocked` 和“暂未找到足够依据”；晚间校园卡场景显示 `TIME_CONFLICT` 对应的“待协调”。
+- 评测结果：`output/evaluation/demo-evaluation.json`。结果属于 `mode=demo`，只覆盖合成资料和确定性规则，不代表真实模型成绩。
