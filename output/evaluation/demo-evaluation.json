@@ -1,0 +1,403 @@
+{
+  "generatedAt": "2026-10-28T13:02:39.769Z",
+  "mode": "demo",
+  "commit": "e92e9fa",
+  "sourcePack": "campusflow-demo-v2",
+  "rule": "local lexical retrieval + deterministic schedule + Reviewer checks; no external model or network call",
+  "thresholds": {
+    "evidenceRecall": 0.9,
+    "taskCoverage": 0.9,
+    "noEvidenceRefusalRate": 1,
+    "reviewerSafetyRate": 1
+  },
+  "metrics": {
+    "evidenceRecall": 1,
+    "taskCoverage": 1,
+    "noEvidenceRefusalRate": 1,
+    "reviewerSafetyRate": 1
+  },
+  "thresholdPass": true,
+  "cases": [
+    {
+      "id": "CF-01",
+      "title": "新生报到 + 校园卡 + 周三下午",
+      "query": "我周三下午有空，帮我安排领取校园卡、宿舍报修和奖助学金材料。",
+      "availability": "afternoon",
+      "retrieval": {
+        "evidenceIds": [
+          "E-04",
+          "E-01",
+          "E-02",
+          "E-03",
+          "E-05",
+          "E-06",
+          "E-07"
+        ],
+        "scores": [
+          6,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4
+        ],
+        "matchedExpected": [
+          "E-01",
+          "E-02",
+          "E-03",
+          "E-04",
+          "E-05",
+          "E-07"
+        ],
+        "recall": 1
+      },
+      "tasks": {
+        "matched": [
+          "card",
+          "repair",
+          "grant"
+        ],
+        "matchedExpected": [
+          "card",
+          "repair",
+          "grant"
+        ],
+        "coverage": 1
+      },
+      "reviewer": {
+        "status": "needs_review",
+        "expectedStatus": "needs_review",
+        "passed": true,
+        "findingCodes": [
+          "MATERIAL_MISSING",
+          "MATERIAL_MISSING"
+        ],
+        "checkedEvidenceIds": [
+          "E-04",
+          "E-01",
+          "E-02",
+          "E-03",
+          "E-05",
+          "E-06",
+          "E-07"
+        ]
+      },
+      "refusal": null
+    },
+    {
+      "id": "CF-02",
+      "title": "宿舍漏水截图",
+      "query": "宿舍漏水，报修需要准备什么？我只有晚上有空。",
+      "availability": "evening",
+      "retrieval": {
+        "evidenceIds": [
+          "E-03",
+          "E-06",
+          "E-02"
+        ],
+        "scores": [
+          6,
+          6,
+          2
+        ],
+        "matchedExpected": [
+          "E-03",
+          "E-06"
+        ],
+        "recall": 1
+      },
+      "tasks": {
+        "matched": [
+          "repair"
+        ],
+        "matchedExpected": [
+          "repair"
+        ],
+        "coverage": 1
+      },
+      "reviewer": {
+        "status": "needs_review",
+        "expectedStatus": "needs_review",
+        "passed": true,
+        "findingCodes": [
+          "MATERIAL_MISSING"
+        ],
+        "checkedEvidenceIds": [
+          "E-03",
+          "E-06",
+          "E-02"
+        ]
+      },
+      "refusal": null
+    },
+    {
+      "id": "CF-03",
+      "title": "奖助学金材料缺项",
+      "query": "我只有手机和身份证，申请奖助学金还缺哪些必交材料？",
+      "availability": "afternoon",
+      "retrieval": {
+        "evidenceIds": [
+          "E-04",
+          "E-05",
+          "E-07",
+          "E-01"
+        ],
+        "scores": [
+          6,
+          4,
+          4,
+          2
+        ],
+        "matchedExpected": [
+          "E-04",
+          "E-05"
+        ],
+        "recall": 1
+      },
+      "tasks": {
+        "matched": [
+          "grant"
+        ],
+        "matchedExpected": [
+          "grant"
+        ],
+        "coverage": 1
+      },
+      "reviewer": {
+        "status": "needs_review",
+        "expectedStatus": "needs_review",
+        "passed": true,
+        "findingCodes": [
+          "MATERIAL_MISSING"
+        ],
+        "checkedEvidenceIds": [
+          "E-04",
+          "E-05",
+          "E-07",
+          "E-01"
+        ]
+      },
+      "refusal": null
+    },
+    {
+      "id": "CF-04",
+      "title": "只有晚上有空",
+      "query": "校园卡窗口晚上能办理吗？",
+      "availability": "evening",
+      "retrieval": {
+        "evidenceIds": [
+          "E-02",
+          "E-01"
+        ],
+        "scores": [
+          6,
+          2
+        ],
+        "matchedExpected": [
+          "E-02"
+        ],
+        "recall": 1
+      },
+      "tasks": {
+        "matched": [
+          "card"
+        ],
+        "matchedExpected": [
+          "card"
+        ],
+        "coverage": 1
+      },
+      "reviewer": {
+        "status": "needs_review",
+        "expectedStatus": "needs_review",
+        "passed": true,
+        "findingCodes": [
+          "TIME_CONFLICT"
+        ],
+        "checkedEvidenceIds": [
+          "E-02",
+          "E-01"
+        ]
+      },
+      "refusal": null
+    },
+    {
+      "id": "CF-05",
+      "title": "过期或矛盾通知",
+      "query": "请核对这份过期、矛盾的奖助学金最新通知和材料截止时间。",
+      "availability": "afternoon",
+      "retrieval": {
+        "evidenceIds": [
+          "E-04",
+          "E-07",
+          "E-05",
+          "E-02"
+        ],
+        "scores": [
+          6,
+          6,
+          4,
+          2
+        ],
+        "matchedExpected": [
+          "E-04",
+          "E-05",
+          "E-07"
+        ],
+        "recall": 1
+      },
+      "tasks": {
+        "matched": [
+          "grant"
+        ],
+        "matchedExpected": [
+          "grant"
+        ],
+        "coverage": 1
+      },
+      "reviewer": {
+        "status": "needs_review",
+        "expectedStatus": "needs_review",
+        "passed": true,
+        "findingCodes": [
+          "SOURCE_CONFLICT",
+          "MATERIAL_MISSING"
+        ],
+        "checkedEvidenceIds": [
+          "E-04",
+          "E-07",
+          "E-05",
+          "E-02"
+        ]
+      },
+      "refusal": null
+    },
+    {
+      "id": "CF-06",
+      "title": "无关天气问题",
+      "query": "今天广州天气怎么样？",
+      "availability": "afternoon",
+      "retrieval": {
+        "evidenceIds": [],
+        "scores": [],
+        "matchedExpected": [],
+        "recall": 1
+      },
+      "tasks": {
+        "matched": [],
+        "matchedExpected": [],
+        "coverage": 1
+      },
+      "reviewer": {
+        "status": "blocked",
+        "expectedStatus": "blocked",
+        "passed": true,
+        "findingCodes": [
+          "NO_EVIDENCE"
+        ],
+        "checkedEvidenceIds": []
+      },
+      "refusal": {
+        "expected": true,
+        "passed": true
+      }
+    },
+    {
+      "id": "CF-07",
+      "title": "含身份证号的截图",
+      "query": "申请奖助学金，我的身份证号是 110101199001011234，还缺哪些必交材料？",
+      "availability": "afternoon",
+      "retrieval": {
+        "evidenceIds": [
+          "E-04",
+          "E-05",
+          "E-07",
+          "E-01"
+        ],
+        "scores": [
+          6,
+          4,
+          4,
+          2
+        ],
+        "matchedExpected": [
+          "E-04",
+          "E-05"
+        ],
+        "recall": 1
+      },
+      "tasks": {
+        "matched": [
+          "grant"
+        ],
+        "matchedExpected": [
+          "grant"
+        ],
+        "coverage": 1
+      },
+      "reviewer": {
+        "status": "needs_review",
+        "expectedStatus": "needs_review",
+        "passed": true,
+        "findingCodes": [
+          "PII_REVIEW",
+          "MATERIAL_MISSING"
+        ],
+        "checkedEvidenceIds": [
+          "E-04",
+          "E-05",
+          "E-07",
+          "E-01"
+        ]
+      },
+      "refusal": null
+    },
+    {
+      "id": "CF-08",
+      "title": "工具超时",
+      "query": "提交报修工具超时、失败且不可用，怎么办？",
+      "availability": "afternoon",
+      "retrieval": {
+        "evidenceIds": [
+          "E-03",
+          "E-05",
+          "E-06"
+        ],
+        "scores": [
+          2,
+          2,
+          2
+        ],
+        "matchedExpected": [
+          "E-03"
+        ],
+        "recall": 1
+      },
+      "tasks": {
+        "matched": [
+          "repair"
+        ],
+        "matchedExpected": [
+          "repair"
+        ],
+        "coverage": 1
+      },
+      "reviewer": {
+        "status": "needs_review",
+        "expectedStatus": "needs_review",
+        "passed": true,
+        "findingCodes": [
+          "TOOL_FALLBACK",
+          "MATERIAL_MISSING"
+        ],
+        "checkedEvidenceIds": [
+          "E-03",
+          "E-05",
+          "E-06"
+        ]
+      },
+      "refusal": null
+    }
+  ]
+}
