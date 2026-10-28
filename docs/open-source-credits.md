@@ -11,5 +11,10 @@
 | [modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk) | 工具边界参考 | 省赛版只开放白名单读工具 |
 | [qdrant/qdrant](https://github.com/qdrant/qdrant) | 向量检索升级路线 | 暂未接入 |
 | [xyflow/xyflow](https://github.com/xyflow/xyflow) | 任务 DAG 可视化参考 | 后续按需接入 |
+| [ag-ui-protocol/ag-ui](https://github.com/ag-ui-protocol/ag-ui) | Agent 状态、工具结果和取消事件的协议参考 | 当前用本地 trace 展示，未引入运行时 |
+| [CopilotKit/CopilotKit](https://github.com/CopilotKit/CopilotKit) | Agent-native 前端交互参考 | 未复制其组件或业务代码 |
+| [microsoft/markitdown](https://github.com/microsoft/markitdown) | 文档导入与 Markdown 化路线 | 图片/PDF 仍明确标为未接入 |
+| [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) | 浏览器自审和反模板视觉方法 | 未复制图片、文案或页面 |
+| [oil-oil/oil-ui](https://github.com/oil-oil/oil-ui) | UI 设计评审与多方向比较方法 | 未复制其 skill 资源 |
 
 完整竞品与能力目录见 `research/competitors/` 和 `C:/Users/ThinkPad/.codex/skills/chuanzhi-ai-web-contest/references/github-project-catalog.md`。

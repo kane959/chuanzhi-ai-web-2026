@@ -1,0 +1,135 @@
+[
+  {
+    "repo": "vercel-labs/agent-skills",
+    "url": "https://github.com/vercel-labs/agent-skills",
+    "capturedAt": "2026-10-28T08:03:24.606784+00:00",
+    "license": null,
+    "defaultBranch": "main",
+    "updatedAt": "2026-10-28T07:51:15Z",
+    "stars": 33130,
+    "commit": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+    "fileNotes": {
+      "LICENSE": "HTTP Error 404: Not Found",
+      "LICENSE.txt": "HTTP Error 404: Not Found"
+    }
+  },
+  {
+    "repo": "anthropics/skills",
+    "url": "https://github.com/anthropics/skills",
+    "capturedAt": "2026-10-28T08:03:24.611769+00:00",
+    "license": null,
+    "defaultBranch": "main",
+    "updatedAt": "2026-10-28T08:02:02Z",
+    "stars": 184336,
+    "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+    "fileNotes": {
+      "LICENSE": "HTTP Error 404: Not Found",
+      "LICENSE.txt": "HTTP Error 404: Not Found"
+    }
+  },
+  {
+    "repo": "ag-ui-protocol/ag-ui",
+    "url": "https://github.com/ag-ui-protocol/ag-ui",
+    "capturedAt": "2026-10-28T08:03:24.640766+00:00",
+    "license": "MIT",
+    "defaultBranch": "main",
+    "updatedAt": "2026-10-28T06:50:27Z",
+    "stars": 16861,
+    "commit": "dab9c95f8e70f03ebc2a817e9900a245dfca6ddd",
+    "fileNotes": {
+      "LICENSE.txt": "HTTP Error 404: Not Found"
+    }
+  },
+  {
+    "repo": "assistant-ui/assistant-ui",
+    "url": "https://github.com/assistant-ui/assistant-ui",
+    "capturedAt": "2026-10-28T08:03:24.723766+00:00",
+    "license": "MIT",
+    "defaultBranch": "main",
+    "updatedAt": "2026-10-28T07:51:22Z",
+    "stars": 12793,
+    "commit": "b6b10672ef896e2deaf1603e7414ef0142943e9e",
+    "fileNotes": {
+      "LICENSE.txt": "HTTP Error 404: Not Found"
+    }
+  },
+  {
+    "repo": "shadcn-ui/ui",
+    "url": "https://github.com/shadcn-ui/ui",
+    "capturedAt": "2026-10-28T08:03:30.262959+00:00",
+    "license": "MIT",
+    "defaultBranch": "main",
+    "updatedAt": "2026-10-28T07:56:25Z",
+    "stars": 126766,
+    "commit": "96da9cc7f1aa10580a3741664e2a77c721206c00",
+    "fileNotes": {
+      "LICENSE": "HTTP Error 404: Not Found",
+      "LICENSE.txt": "HTTP Error 404: Not Found"
+    }
+  },
+  {
+    "repo": "xyflow/xyflow",
+    "url": "https://github.com/xyflow/xyflow",
+    "capturedAt": "2026-10-28T08:03:30.503092+00:00",
+    "license": "MIT",
+    "defaultBranch": "main",
+    "updatedAt": "2026-10-28T07:49:16Z",
+    "stars": 38803,
+    "commit": "bb63f4cc345acf4e6c73e0371be3ea3ca01b2a18",
+    "fileNotes": {
+      "LICENSE.txt": "HTTP Error 404: Not Found"
+    }
+  },
+  {
+    "repo": "CopilotKit/CopilotKit",
+    "url": "https://github.com/CopilotKit/CopilotKit",
+    "capturedAt": "2026-10-28T08:03:30.585240+00:00",
+    "license": "MIT",
+    "defaultBranch": "main",
+    "updatedAt": "2026-10-28T07:27:10Z",
+    "stars": 38298,
+    "commit": "4693af4d398c63da6f185ed7024ca5b196c20958",
+    "fileNotes": {
+      "LICENSE.txt": "HTTP Error 404: Not Found"
+    }
+  },
+  {
+    "repo": "microsoft/markitdown",
+    "url": "https://github.com/microsoft/markitdown",
+    "capturedAt": "2026-10-28T08:03:30.820035+00:00",
+    "license": "MIT",
+    "defaultBranch": "main",
+    "updatedAt": "2026-10-28T08:01:22Z",
+    "stars": 192623,
+    "commit": "7482c092d9c0074a89803c9fdb63a969e7fe17fc",
+    "fileNotes": {
+      "LICENSE.txt": "HTTP Error 404: Not Found"
+    }
+  },
+  {
+    "repo": "Leonxlnx/taste-skill",
+    "url": "https://github.com/Leonxlnx/taste-skill",
+    "capturedAt": "2026-10-28T08:03:35.364015+00:00",
+    "license": "MIT",
+    "defaultBranch": "main",
+    "updatedAt": "2026-10-28T08:03:01Z",
+    "stars": 103890,
+    "commit": "12af471f627f866411b4bd785b19646d3672784c",
+    "fileNotes": {
+      "LICENSE.txt": "HTTP Error 404: Not Found"
+    }
+  },
+  {
+    "repo": "oil-oil/oil-ui",
+    "url": "https://github.com/oil-oil/oil-ui",
+    "capturedAt": "2026-10-28T08:03:35.556713+00:00",
+    "license": "MIT",
+    "defaultBranch": "main",
+    "updatedAt": "2026-10-28T08:03:05Z",
+    "stars": 2428,
+    "commit": "49691918b6b1b7a2ec18776bd9dc454fdd8c71ec",
+    "fileNotes": {
+      "LICENSE.txt": "HTTP Error 404: Not Found"
+    }
+  }
+]

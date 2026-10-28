@@ -10,7 +10,7 @@
 - 根据官方评分权重建立了选题决策表、技术架构、验收标准和提交清单。
 - 检索并保存了 2026 年可见的 AI Web 竞品 README（仅作为能力参考，禁止直接包装或抄袭）。
 - 将附件问卷截图和视频样例转为研究记录：问卷强调“解决具体问题”和“互动体验”，视频样例包含非遗纸艺展示和健康管理看板。
-- 安装了与本项目直接相关的 Codex skills：Playwright、PDF、Vercel Deploy、Cloudflare Deploy、GitHub CI、Security Best Practices、Speech、Transcribe，并创建了本项目专用 `chuanzhi-ai-web-contest` skill。
+- 安装了与本项目直接相关的 Codex skills：Playwright、PDF、Vercel Deploy、Cloudflare Deploy、GitHub CI、Security Best Practices、Speech、Transcribe、Frontend Design、Web Interface Guidelines、React Best Practices，并创建了本项目专用 `chuanzhi-ai-web-contest` skill。
 
 ## 目录
 
@@ -19,8 +19,9 @@
 - `docs/03-product-brief.md`：CampusFlow 选题假设、用户、场景和差异化。
 - `docs/04-architecture.md`：AI Native 架构与数据边界。
 - `docs/05-sprint-plan.md`：到省赛提交的 22 天执行排期。
+- `docs/08-frontend-direction.md`：GitHub 参考、视觉方向和前端验收边界。
 - `submission/checklist.md`：代码、演示视频、PDF 文档、在线演示的提交门禁。
-- `prototype/`：第一版 UI 骨架（后续接入真实 AI）。
+- `prototype/`：可操作的工作台原型（本地检索、排期冲突、材料进度、原文抽屉和导出预览）。
 - `research/`：原始抓取结果、竞品 README、附件观察记录。
 - `research/2025-national-benchmark.md`：去年公开国赛作品的核对记录与可迁移启发。
 
@@ -30,6 +31,7 @@
 - 竞品资料抓取：已完成，见 `research/competitors/`。
 - 产品方向：CampusFlow 通用校园行动 OS；参赛学校、组别和指导教师只记录在提交资料中，不作为产品事实或知识来源。队员、仓库和在线演示地址仍待补齐。
 - 真实模型接入：尚未配置 API Key，原型默认使用可解释的演示数据；不在仓库写入密钥。
+- GitHub 只读调研快照：`research/github-2026-10-28/`，包含仓库版本、许可证和 README；不把外部代码作为运行时依赖。
 
 ## 本地运行与预检
 

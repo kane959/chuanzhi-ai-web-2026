@@ -1,163 +1,50 @@
-export type TaskStatus = 'done' | 'doing' | 'todo' | 'blocked'
+import pack from '../public/data/synthetic-campus-pack.json'
+import type { Evidence, Task } from './types'
 
-export type Task = {
-  id: string
-  title: string
-  detail: string
-  time: string
-  location: string
-  status: TaskStatus
-  owner: string
-  materials: { label: string; required: boolean; checked: boolean }[]
-  evidence: string[]
-  note: string
-}
-
-export type Evidence = {
-  id: string
-  title: string
-  source: string
-  locator: string
-  updated: string
-  score: number
-  excerpt: string
-  keywords: string[]
-}
+export const evidence: Evidence[] = pack.documents
+export const evidenceById = new Map(evidence.map((item) => [item.id, item]))
+export const packNotice = pack.notice
 
 export const initialTasks: Task[] = [
   {
-    id: 'card',
-    title: '领取校园卡',
-    detail: '完成身份核验并领取校园卡，后续门禁与图书馆服务都依赖此步骤。',
-    time: '周三 · 14:00–15:00',
-    location: '学生活动中心 · 一层服务台',
-    status: 'done',
-    owner: '本人到场',
+    id: 'card', title: '领取校园卡', kind: 'onsite', duration: 45, status: 'todo',
+    detail: '带好身份证件和录取通知书，到服务窗口完成身份核验。',
+    location: '学生活动中心 · 一层服务台', evidence: ['E-01', 'E-02'],
     materials: [
-      { label: '录取通知书', required: true, checked: true },
-      { label: '有效身份证件', required: true, checked: true },
+      { id: 'offer', label: '录取通知书', required: true, checked: true },
+      { id: 'identity', label: '有效身份证件', required: true, checked: true },
     ],
-    evidence: ['E-01', 'E-02'],
-    note: '需本人到场；窗口开放时间由 E-02 支持。',
+    note: '需要本人到场。工作日窗口在 17:00 关闭，晚间不能办理。',
   },
   {
-    id: 'repair',
-    title: '提交宿舍报修',
-    detail: '拍照上传漏水位置，填写宿舍号，生成可追踪的维修工单。',
-    time: '周三 · 15:30–16:00',
-    location: '宿舍 6 栋 · 线上报修',
-    status: 'doing',
-    owner: '线上办理',
+    id: 'repair', title: '提交宿舍报修', kind: 'online', duration: 30, status: 'todo',
+    detail: '整理问题照片和位置说明，核对后自行提交报修。',
+    location: '线上办理 · 宿舍报修入口', evidence: ['E-03', 'E-06'],
     materials: [
-      { label: '问题照片', required: true, checked: false },
-      { label: '宿舍号', required: true, checked: true },
+      { id: 'photo', label: '问题照片', required: false, checked: false },
+      { id: 'room', label: '楼栋与房间号', required: true, checked: true },
+      { id: 'description', label: '问题描述', required: true, checked: false },
     ],
-    evidence: ['E-03'],
-    note: '拍照会在本地压缩并清除 EXIF；提交前仍需确认。',
+    note: '照片是建议项，不是必交项。涉及漏电或持续大量漏水时，应优先联系值班人员。',
   },
   {
-    id: 'grant',
-    title: '准备奖助学金材料',
-    detail: '根据家庭情况选择对应材料包，先完成缺项检查，再导出清单。',
-    time: '周四 · 晚上',
-    location: '线上准备 · 学工系统',
-    status: 'todo',
-    owner: '本人准备',
+    id: 'grant', title: '准备奖助学金材料', kind: 'online', duration: 60, status: 'todo',
+    detail: '先备齐申请表与家庭情况说明，其他证明按申请类别准备。',
+    location: '线上准备 · 学工系统', evidence: ['E-04', 'E-05', 'E-07'],
     materials: [
-      { label: '申请表', required: true, checked: false },
-      { label: '家庭情况说明', required: true, checked: false },
-      { label: '证明材料（按需）', required: false, checked: false },
+      { id: 'application', label: '申请表', required: true, checked: false },
+      { id: 'family', label: '家庭情况说明', required: true, checked: false },
+      { id: 'supporting', label: '其他证明材料', required: false, checked: false },
     ],
-    evidence: ['E-04', 'E-05'],
-    note: '材料清单存在“按需”项，系统不会把它误判为必交。',
-  },
-]
-
-export const evidence: Evidence[] = [
-  {
-    id: 'E-01',
-    title: '新生报到服务指南',
-    source: '校园服务中心 / 2026 新生材料包',
-    locator: '第 2 页 · 领取校园卡',
-    updated: '2026-09-01',
-    score: 0.98,
-    excerpt: '新生凭录取通知书和有效身份证件，在学生活动中心一层服务台领取校园卡。',
-    keywords: ['校园卡', '报到', '新生', '身份证', '录取通知书', '服务台'],
-  },
-  {
-    id: 'E-02',
-    title: '校园服务窗口时间表',
-    source: '校园服务中心 / 服务时间公告',
-    locator: '表 1 · 新生服务窗口',
-    updated: '2026-09-03',
-    score: 0.91,
-    excerpt: '周一至周五 08:30–17:00，午间 12:00–13:30 轮值服务。',
-    keywords: ['时间', '窗口', '开放', '服务台', '周三', '下午'],
-  },
-  {
-    id: 'E-03',
-    title: '宿舍维修线上办理说明',
-    source: '后勤保障处 / 报修服务指引',
-    locator: '第 1 页 · 图片与位置',
-    updated: '2026-08-28',
-    score: 0.88,
-    excerpt: '报修需填写楼栋、房间号和问题描述；建议上传一张能看清问题位置的照片。',
-    keywords: ['报修', '宿舍', '照片', '楼栋', '房间号', '漏水'],
-  },
-  {
-    id: 'E-04',
-    title: '奖助学金申请通知',
-    source: '学生工作处 / 2026 秋季通知',
-    locator: '第 3 页 · 申请材料',
-    updated: '2026-09-08',
-    score: 0.84,
-    excerpt: '申请表和家庭情况说明为必备材料，其他证明根据申请类别准备。',
-    keywords: ['奖助学金', '资助', '申请表', '家庭情况', '材料', '证明'],
-  },
-  {
-    id: 'E-05',
-    title: '学工系统填报帮助',
-    source: '学生工作处 / 系统帮助中心',
-    locator: '步骤 4 · 导出前检查',
-    updated: '2026-09-10',
-    score: 0.79,
-    excerpt: '提交前可在“材料检查”页面查看缺失项，系统会保留草稿。',
-    keywords: ['材料', '检查', '缺失', '草稿', '学工系统', '提交'],
+    note: '样例申请截止为 10 月 30 日 17:00。其他证明按需准备，不能统一当作必交材料。',
   },
 ]
 
 export const quickPrompts = [
-  '我周三下午有空，帮我安排新生报到和宿舍报修',
-  '把这张通知里的截止时间和必交材料整理出来',
-  '我只有手机和身份证，奖助学金还缺什么？',
+  { label: '安排入学这几件事', text: '我周三下午有空，帮我安排领取校园卡、宿舍报修和奖助学金材料。' },
+  { label: '宿舍漏水怎么处理', text: '宿舍漏水，报修需要准备什么？我只有晚上有空。' },
+  { label: '检查奖助材料缺项', text: '我只有手机和身份证，申请奖助学金还缺哪些必交材料？' },
 ]
 
-const queryTerms = [
-  '校园卡', '报到', '新生', '身份证', '录取通知书', '服务台', '时间', '窗口', '开放',
-  '周三', '下午', '报修', '宿舍', '照片', '楼栋', '房间号', '漏水', '奖助学金', '资助',
-  '申请表', '家庭情况', '材料', '证明', '检查', '缺失', '草稿', '学工系统', '提交',
-]
-
-function normalizeQuery(query: string) {
-  return query.toLowerCase().replace(/[，。！？、；：,.!?;:()（）\s]/g, '')
-}
-
-/**
- * 本地演示检索器：只在合成资料包内做可解释的关键词召回。
- * 真实模式可替换成 BM25/向量检索，但保持 Evidence 契约不变。
- */
-export function retrieveEvidence(query: string, limit = 5) {
-  const normalized = normalizeQuery(query)
-  const terms = queryTerms.filter((term) => normalized.includes(term.toLowerCase()))
-  return evidence
-    .map((item) => {
-      const hits = item.keywords.filter((keyword) => terms.some((term) => keyword.includes(term) || term.includes(keyword)))
-      const exactPhraseBoost = normalized.includes(normalizeQuery(item.title)) ? 0.12 : 0
-      const score = Math.min(0.99, 0.22 + hits.length * 0.11 + exactPhraseBoost + item.score * 0.35)
-      return { item, score, hits }
-    })
-    .filter((result) => result.hits.length > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map(({ item, score }) => ({ ...item, score: Number(score.toFixed(2)) }))
-}
+export { retrieveEvidence } from './lib/planner'
+export type { Task, TaskStatus, Evidence } from './types'
