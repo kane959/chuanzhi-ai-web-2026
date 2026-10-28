@@ -4,7 +4,7 @@ import {
   CircleAlert, Clock3, Download, ExternalLink, FileCheck2, FileImage, Fingerprint, Info, MapPin,
   Menu, Paperclip, Play, RefreshCw, ShieldCheck, Sparkles, X, Zap,
 } from 'lucide-react'
-import { evidence, initialTasks, quickPrompts, type Task, type TaskStatus } from './data'
+import { evidence, initialTasks, quickPrompts, retrieveEvidence, type Task, type TaskStatus } from './data'
 
 const statusMeta: Record<TaskStatus, { label: string; className: string }> = {
   done: { label: '已完成', className: 'status-done' },
@@ -23,6 +23,8 @@ function App() {
   const [onlyEvening, setOnlyEvening] = useState(false)
   const [notice, setNotice] = useState('演示模式已就绪：不需要 API Key，也不会上传你的内容。')
   const [approvalVisible, setApprovalVisible] = useState(true)
+  const [retrievedEvidenceIds, setRetrievedEvidenceIds] = useState<string[]>([])
+  const [retrievalState, setRetrievalState] = useState<'idle' | 'found' | 'empty'>('idle')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks[0]
@@ -31,6 +33,12 @@ function App() {
   const checkedMaterials = tasks.flatMap((task) => task.materials).filter((item) => item.checked).length
   const totalMaterials = tasks.flatMap((task) => task.materials).length
   const progress = useMemo(() => Math.round((completed / tasks.length) * 100), [completed, tasks.length])
+  const visibleEvidenceIds = useMemo(() => {
+    const taskEvidence = selectedTask.evidence
+    if (retrievalState === 'empty') return []
+    const rankedForTask = retrievedEvidenceIds.filter((id) => taskEvidence.includes(id))
+    return rankedForTask.length > 0 ? rankedForTask : taskEvidence
+  }, [retrievalState, retrievedEvidenceIds, selectedTask.evidence])
 
   function updateTaskStatus(id: string) {
     setTasks((current) => current.map((task) => task.id === id
@@ -41,10 +49,26 @@ function App() {
 
   function runPlan() {
     if (running) return
+    const retrieved = retrieveEvidence(prompt)
+    setRetrievedEvidenceIds(retrieved.map((item) => item.id))
+    setRetrievalState(retrieved.length > 0 ? 'found' : 'empty')
+    const normalizedPrompt = prompt.toLowerCase()
+    const matchedTaskId = normalizedPrompt.includes('报修') || normalizedPrompt.includes('漏水') || normalizedPrompt.includes('宿舍')
+      ? 'repair'
+      : normalizedPrompt.includes('奖助') || normalizedPrompt.includes('材料') || normalizedPrompt.includes('资助')
+        ? 'grant'
+        : normalizedPrompt.includes('校园卡') || normalizedPrompt.includes('报到')
+          ? 'card'
+          : selectedTaskId
+    const matchedTask = tasks.find((task) => task.id === matchedTaskId) ?? tasks[0]
+    setSelectedTaskId(matchedTask.id)
+    setSelectedEvidenceId(retrieved.find((item) => matchedTask.evidence.includes(item.id))?.id ?? matchedTask.evidence[0])
     setRunning(true)
     setStage(1)
-    setNotice('Planner 正在把目标拆成任务，并为每一步寻找证据。')
-    window.setTimeout(() => { setStage(2); setNotice('Retriever 已找到 5 条带定位的校园资料。') }, 650)
+    setNotice(retrieved.length > 0
+      ? `Planner 正在拆解目标；Retriever 已在通用合成资料包中召回 ${retrieved.length} 条依据。`
+      : 'Planner 正在拆解目标；Retriever 暂未找到足够依据，将保守展示并等待确认。')
+    window.setTimeout(() => { setStage(2); setNotice(retrieved.length > 0 ? `Retriever 已排序 ${retrieved.length} 条带定位的合成资料。` : 'Retriever 未找到足够依据，已保留人工确认入口。') }, 650)
     window.setTimeout(() => { setStage(3); setNotice('工具校验完成：窗口时间、材料依赖和时间冲突均已检查。') }, 1300)
     window.setTimeout(() => { setStage(4); setRunning(false); setNotice('计划生成完成。任何对外写入动作都需要你确认。') }, 1950)
   }
@@ -137,7 +161,7 @@ function App() {
             <div className="input-toolbar"><button className="soft-button" onClick={() => fileRef.current?.click()}><Paperclip size={15} />上传通知 / 截图</button><input ref={fileRef} type="file" accept=".png,.jpg,.jpeg,.pdf,.txt" hidden onChange={(event) => handleUpload(event.target.files?.[0])} /><span className="char-count">{prompt.length}/500</span></div>
             <div className="quick-prompts"><span>试试这些</span>{quickPrompts.map((item) => <button key={item} onClick={() => setPrompt(item)}>{item}<ChevronRight size={13} /></button>)}</div>
             <button className="primary-button generate-button" onClick={runPlan} disabled={running}>{running ? <><RefreshCw size={16} className="spin" />正在查证与规划…</> : <><Sparkles size={16} />生成我的行动计划<ArrowRight size={16} /></>}</button>
-            <div className="privacy-note"><ShieldCheck size={15} /><span>演示模式只使用本地样例数据。真实模式会先做隐私提示，再把必要片段送入模型。</span></div>
+            <div className="privacy-note"><ShieldCheck size={15} /><span>演示只使用通用合成校园资料，不代表任何学校官方通知。真实模式会先做隐私提示，再把必要片段送入模型。</span></div>
           </aside>
 
           <section className="plan-column panel">
@@ -155,10 +179,10 @@ function App() {
           </section>
 
           <aside className="evidence-column panel" id="evidence">
-            <div className="panel-heading"><div><span className="kicker">03 / 证据与确认</span><h2>为什么这样安排？</h2></div><span className="confidence"><span />可信度高</span></div>
+            <div className="panel-heading"><div><span className="kicker">03 / 证据与确认</span><h2>为什么这样安排？</h2></div><span className="confidence"><span />{retrievedEvidenceIds.length > 0 ? `本次检索 ${retrievedEvidenceIds.length} 条` : '合成资料包'}</span></div>
             <div className="evidence-context"><div className="context-icon"><Info size={17} /></div><div><strong>{selectedTask.title}</strong><p>{selectedTask.note}</p></div></div>
-            <div className="evidence-list">{selectedTask.evidence.map((id) => { const item = evidence.find((entry) => entry.id === id)!; return <button className={selectedEvidenceId === id ? 'evidence-card active' : 'evidence-card'} key={id} onClick={() => setSelectedEvidenceId(id)}><div className="evidence-top"><span className="source-id">{item.id}</span><span className="match-score">{Math.round(item.score * 100)}% 匹配</span></div><strong>{item.title}</strong><span className="evidence-source">{item.source}</span><p>{item.excerpt}</p><div className="evidence-bottom"><span>{item.locator}</span><span>更新于 {item.updated}</span></div></button> })}</div>
-            <div className="selected-source"><div className="source-line"><span className="source-id">{selectedEvidence.id}</span><span>当前依据</span><span className="source-score">{Math.round(selectedEvidence.score * 100)}%</span></div><p>“{selectedEvidence.excerpt}”</p><button onClick={openEvidence}>打开原文定位 <ExternalLink size={13} /></button></div>
+            <div className="evidence-list">{visibleEvidenceIds.length > 0 ? visibleEvidenceIds.map((id) => { const item = evidence.find((entry) => entry.id === id)!; return <button className={selectedEvidenceId === id ? 'evidence-card active' : 'evidence-card'} key={id} onClick={() => setSelectedEvidenceId(id)}><div className="evidence-top"><span className="source-id">{item.id}</span><span className="match-score">{Math.round(item.score * 100)}% 匹配</span></div><strong>{item.title}</strong><span className="evidence-source">{item.source}</span><p>{item.excerpt}</p><div className="evidence-bottom"><span>{item.locator}</span><span>更新于 {item.updated}</span></div></button> }) : <div className="evidence-empty"><CircleAlert size={16} /><strong>暂未找到足够依据</strong><p>请补充通知、办理事项或截止时间。系统不会为通用问题编造校园事实。</p></div>}</div>
+            {visibleEvidenceIds.length > 0 && <div className="selected-source"><div className="source-line"><span className="source-id">{selectedEvidence.id}</span><span>当前依据</span><span className="source-score">{Math.round(selectedEvidence.score * 100)}%</span></div><p>“{selectedEvidence.excerpt}”</p><button onClick={openEvidence}>打开原文定位 <ExternalLink size={13} /></button></div>}
             {approvalVisible && <div className="approval-box"><div className="approval-icon"><CircleAlert size={17} /></div><div><strong>提交前需要你的确认</strong><p>CampusFlow 不会替你提交系统或写入日历。确认后才会生成可导出的清单。</p></div><button aria-label="关闭提示" onClick={() => setApprovalVisible(false)}><X size={14} /></button></div>}
           </aside>
         </section>
@@ -169,7 +193,7 @@ function App() {
         </section>
         <div className="status-toast" role="status"><span className="toast-dot" />{notice}</div>
       </main>
-      <footer className="footer"><span>CampusFlow / v0.1 · 本地演示数据</span><span>为 2026 传智杯 AI WEB 赛道准备</span><span><ShieldCheck size={13} />隐私边界已开启</span></footer>
+      <footer className="footer"><span>CampusFlow / v0.1 · 通用合成资料</span><span>为 2026 传智杯 AI WEB 赛道准备</span><span><ShieldCheck size={13} />隐私边界已开启</span></footer>
     </div>
   )
 }

@@ -15,7 +15,7 @@ for (const file of requiredFiles) await access(file)
 
 const app = await readFile('prototype/src/App.tsx', 'utf8')
 const data = await readFile('prototype/src/data.ts', 'utf8')
-for (const marker of ['生成我的行动计划', '导出清单', '打开原文定位', '演示模式只使用本地样例数据']) {
+for (const marker of ['生成我的行动计划', '导出清单', '打开原文定位', '通用合成校园资料']) {
   assert.match(app, new RegExp(marker), `missing UI marker: ${marker}`)
 }
 for (const marker of ['Evidence', 'Task', 'E-03', 'E-05']) {

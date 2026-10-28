@@ -21,6 +21,7 @@ export type Evidence = {
   updated: string
   score: number
   excerpt: string
+  keywords: string[]
 }
 
 export const initialTasks: Task[] = [
@@ -81,6 +82,7 @@ export const evidence: Evidence[] = [
     updated: '2026-09-01',
     score: 0.98,
     excerpt: '新生凭录取通知书和有效身份证件，在学生活动中心一层服务台领取校园卡。',
+    keywords: ['校园卡', '报到', '新生', '身份证', '录取通知书', '服务台'],
   },
   {
     id: 'E-02',
@@ -90,6 +92,7 @@ export const evidence: Evidence[] = [
     updated: '2026-09-03',
     score: 0.91,
     excerpt: '周一至周五 08:30–17:00，午间 12:00–13:30 轮值服务。',
+    keywords: ['时间', '窗口', '开放', '服务台', '周三', '下午'],
   },
   {
     id: 'E-03',
@@ -99,6 +102,7 @@ export const evidence: Evidence[] = [
     updated: '2026-08-28',
     score: 0.88,
     excerpt: '报修需填写楼栋、房间号和问题描述；建议上传一张能看清问题位置的照片。',
+    keywords: ['报修', '宿舍', '照片', '楼栋', '房间号', '漏水'],
   },
   {
     id: 'E-04',
@@ -108,6 +112,7 @@ export const evidence: Evidence[] = [
     updated: '2026-09-08',
     score: 0.84,
     excerpt: '申请表和家庭情况说明为必备材料，其他证明根据申请类别准备。',
+    keywords: ['奖助学金', '资助', '申请表', '家庭情况', '材料', '证明'],
   },
   {
     id: 'E-05',
@@ -117,6 +122,7 @@ export const evidence: Evidence[] = [
     updated: '2026-09-10',
     score: 0.79,
     excerpt: '提交前可在“材料检查”页面查看缺失项，系统会保留草稿。',
+    keywords: ['材料', '检查', '缺失', '草稿', '学工系统', '提交'],
   },
 ]
 
@@ -125,3 +131,33 @@ export const quickPrompts = [
   '把这张通知里的截止时间和必交材料整理出来',
   '我只有手机和身份证，奖助学金还缺什么？',
 ]
+
+const queryTerms = [
+  '校园卡', '报到', '新生', '身份证', '录取通知书', '服务台', '时间', '窗口', '开放',
+  '周三', '下午', '报修', '宿舍', '照片', '楼栋', '房间号', '漏水', '奖助学金', '资助',
+  '申请表', '家庭情况', '材料', '证明', '检查', '缺失', '草稿', '学工系统', '提交',
+]
+
+function normalizeQuery(query: string) {
+  return query.toLowerCase().replace(/[，。！？、；：,.!?;:()（）\s]/g, '')
+}
+
+/**
+ * 本地演示检索器：只在合成资料包内做可解释的关键词召回。
+ * 真实模式可替换成 BM25/向量检索，但保持 Evidence 契约不变。
+ */
+export function retrieveEvidence(query: string, limit = 5) {
+  const normalized = normalizeQuery(query)
+  const terms = queryTerms.filter((term) => normalized.includes(term.toLowerCase()))
+  return evidence
+    .map((item) => {
+      const hits = item.keywords.filter((keyword) => terms.some((term) => keyword.includes(term) || term.includes(keyword)))
+      const exactPhraseBoost = normalized.includes(normalizeQuery(item.title)) ? 0.12 : 0
+      const score = Math.min(0.99, 0.22 + hits.length * 0.11 + exactPhraseBoost + item.score * 0.35)
+      return { item, score, hits }
+    })
+    .filter((result) => result.hits.length > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ item, score }) => ({ ...item, score: Number(score.toFixed(2)) }))
+}
