@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "installCommand": "pnpm install --dir prototype --frozen-lockfile",
+  "installCommand": "pnpm install --dir prototype --no-frozen-lockfile",
   "buildCommand": "pnpm build",
   "outputDirectory": "prototype/dist",
   "functions": {

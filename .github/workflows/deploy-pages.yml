@@ -30,7 +30,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - name: Install
-        run: pnpm install --dir prototype --frozen-lockfile
+        run: pnpm install --dir prototype --no-frozen-lockfile
       - name: Build
         run: pnpm build
       - name: Configure Pages
