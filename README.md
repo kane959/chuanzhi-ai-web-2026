@@ -22,6 +22,8 @@
 - `docs/08-frontend-direction.md`：GitHub 参考、视觉方向和前端验收边界。
 - `submission/checklist.md`：代码、演示视频、PDF 文档、在线演示的提交门禁。
 - `prototype/`：可操作的工作台原型（本地检索、排期冲突、材料进度、原文抽屉和导出预览）。
+- `server/`、`api/`：单页官网资料同步服务；白名单、大小/超时限制、来源 URL 和 SSRF 防护。
+- `docs/deployment.md`：公网预览、长期部署和官网同步配置说明。
 - `research/`：原始抓取结果、竞品 README、附件观察记录。
 - `research/2025-national-benchmark.md`：去年公开国赛作品的核对记录与可迁移启发。
 
@@ -40,6 +42,15 @@ pnpm install --dir prototype
 pnpm dev
 ```
 
+需要启用官网单页同步时，另开一个终端：
+
+```powershell
+$env:SYNC_ALLOWED_HOSTS="example.edu.cn,www.example.edu.cn"
+pnpm server
+```
+
+前端开发服务器会把 `/api` 代理到 `http://127.0.0.1:8787`。部署到 Vercel 时，`vercel.json` 会使用 `prototype/dist` 作为静态产物，并部署 `api/health.js` 与 `api/sources.js`。公网环境只应把明确授权的官网域名写入 `SYNC_ALLOWED_HOSTS`，不要把 API 令牌或模型密钥放进前端变量。
+
 另开终端执行：
 
 ```bash
@@ -47,6 +58,7 @@ pnpm typecheck
 pnpm lint
 pnpm build
 pnpm test:e2e
+pnpm test:source-sync
 pnpm preflight
 ```
 

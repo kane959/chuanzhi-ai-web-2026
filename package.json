@@ -5,10 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --dir prototype dev",
+    "server": "node server/index.mjs",
+    "serve": "pnpm build && pnpm server",
     "build": "pnpm --dir prototype build",
     "typecheck": "pnpm --dir prototype check",
     "lint": "node scripts/lint.mjs",
     "test:e2e": "node tests/smoke.mjs",
+    "test:source-sync": "node tests/source-sync.mjs",
     "evaluate": "node scripts/evaluate_demo.mjs",
     "preflight": "python C:/Users/ThinkPad/.codex/skills/chuanzhi-ai-web-contest/scripts/check_submission.py ."
   }

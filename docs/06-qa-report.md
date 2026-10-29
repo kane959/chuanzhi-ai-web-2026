@@ -42,3 +42,5 @@
 - `pnpm evaluate`：CF-01 至 CF-08 全部通过；证据召回率、任务覆盖率、无依据拒答率和 Reviewer 安全率均为 1.000。
 - 浏览器复核：默认目标显示 `needs_review`；天气问题显示 `blocked` 和“暂未找到足够依据”；晚间校园卡场景显示 `TIME_CONFLICT` 对应的“待协调”。
 - 评测结果：`output/evaluation/demo-evaluation.json`。结果属于 `mode=demo`，只覆盖合成资料和确定性规则，不代表真实模型成绩。
+- `pnpm test:source-sync`：通过；验证正文提取、域名白名单、内网/回环地址拒绝和空白名单拒绝。
+- 本地 HTTP 走查：`GET /api/health` 返回服务状态；`POST /api/sources` 对 `example.com` 返回来源 URL、正文摘要、关键词和文档 ID。

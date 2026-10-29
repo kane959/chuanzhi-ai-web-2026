@@ -5,10 +5,10 @@ const documents: Evidence[] = pack.documents
 const normalize = (value: string) => value.toLowerCase().replace(/[\s，。！？、；：,.!?;:（）()]/g, '')
 
 /** Lexical demonstration retrieval. Score is relevance, never model confidence. */
-export function retrieveEvidence(query: string, limit = 8): RetrievalHit[] {
+export function retrieveEvidence(query: string, limit = 8, sourceDocuments: Evidence[] = documents): RetrievalHit[] {
   const normalized = normalize(query)
   if (!normalized) return []
-  return documents.flatMap((item) => {
+  return sourceDocuments.flatMap((item) => {
     const matchedTerms = item.keywords.filter((term) => normalized.includes(normalize(term)))
     if (!matchedTerms.length) return []
     const score = matchedTerms.length * 2 + (normalized.includes(normalize(item.title)) ? 4 : 0)

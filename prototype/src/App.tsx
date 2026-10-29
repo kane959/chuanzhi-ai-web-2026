@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowRight, Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight, CircleAlert,
-  ClipboardCheck, Clock3, Download, ExternalLink, FileText, Info, MapPin, Menu,
+  ClipboardCheck, Clock3, Download, ExternalLink, FileText, Globe2, Info, LoaderCircle, MapPin, Menu,
   Paperclip, Play, RefreshCw, Search, ShieldCheck, Sparkles, X,
 } from 'lucide-react'
-import { evidence, evidenceById, initialTasks, packNotice, quickPrompts } from './data'
+import { evidence, initialTasks, packNotice, quickPrompts } from './data'
 import { createChecklist, matchTaskIds, missingRequired, retrieveEvidence, reviewPlan, scheduleTasks } from './lib/planner'
 import { restoreProgress, saveProgress } from './lib/storage'
 import type { Availability, Evidence, RetrievalHit, ReviewResult, ScheduledTask, Task, TraceEvent } from './types'
@@ -26,6 +26,12 @@ function App() {
   const [selectedTaskId, setSelectedTaskId] = useState('repair')
   const [selectedEvidenceId, setSelectedEvidenceId] = useState('E-03')
   const [retrievalHits, setRetrievalHits] = useState<RetrievalHit[]>([])
+  const [liveEvidence, setLiveEvidence] = useState<Evidence[]>([])
+  const [sourceUrl, setSourceUrl] = useState('')
+  const [sourceSyncing, setSourceSyncing] = useState(false)
+  const [sourceSyncEnabled, setSourceSyncEnabled] = useState<boolean | null>(null)
+  const [sourceSyncError, setSourceSyncError] = useState('')
+  const [sourceSyncInfo, setSourceSyncInfo] = useState('')
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null)
   const [hasRun, setHasRun] = useState(false)
   const [noEvidence, setNoEvidence] = useState(false)
@@ -38,9 +44,11 @@ function App() {
   const timerRefs = useRef<number[]>([])
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks[0]
+  const allEvidence = useMemo(() => [...liveEvidence, ...evidence], [liveEvidence])
+  const allEvidenceById = useMemo(() => new Map(allEvidence.map((item) => [item.id, item])), [allEvidence])
   const schedule = useMemo(() => scheduleTasks(tasks, availability), [tasks, availability])
   const selectedSchedule = schedule.find((item) => item.task.id === selectedTask.id) ?? schedule[0]
-  const selectedEvidence = evidenceById.get(selectedEvidenceId) ?? evidenceById.get(selectedTask.evidence[0]) ?? evidence[0]
+  const selectedEvidence = allEvidenceById.get(selectedEvidenceId) ?? allEvidenceById.get(selectedTask.evidence[0]) ?? allEvidence[0]
   const completedTasks = tasks.filter((task) => task.status === 'done').length
   const completedMaterials = tasks.flatMap((task) => task.materials).filter((item) => item.checked).length
   const totalMaterials = tasks.flatMap((task) => task.materials).length
@@ -48,15 +56,20 @@ function App() {
   const relevantEvidence = useMemo(() => {
     const ids = new Set(selectedTask.evidence)
     const ranked = retrievalHits.filter((hit) => ids.has(hit.evidence.id))
-    return ranked.length ? ranked : selectedTask.evidence.map((id) => ({ evidence: evidenceById.get(id)!, score: 0, matchedTerms: [] }))
-  }, [retrievalHits, selectedTask.evidence])
+    return ranked.length ? ranked : selectedTask.evidence.map((id) => ({ evidence: allEvidenceById.get(id)!, score: 0, matchedTerms: [] }))
+  }, [allEvidenceById, retrievalHits, selectedTask.evidence])
   const libraryResults = useMemo(() => {
     const query = libraryQuery.trim().toLowerCase()
-    if (!query) return evidence
-    return evidence.filter((item) => (item.title + item.domain + item.text + item.keywords.join('')).toLowerCase().includes(query))
-  }, [libraryQuery])
+    if (!query) return allEvidence
+    return allEvidence.filter((item) => (item.title + item.domain + item.text + item.keywords.join('')).toLowerCase().includes(query))
+  }, [allEvidence, libraryQuery])
 
   useEffect(() => { saveProgress(tasks) }, [tasks])
+  useEffect(() => {
+    fetch('/api/sources').then((response) => response.ok ? response.json() : Promise.reject(new Error('not configured')))
+      .then((payload: { enabled?: boolean }) => setSourceSyncEnabled(Boolean(payload.enabled)))
+      .catch(() => setSourceSyncEnabled(false))
+  }, [])
   useEffect(() => () => { timerRefs.current.forEach((timer) => window.clearTimeout(timer)) }, [])
   useEffect(() => {
     if (!drawerEvidence && !exportOpen) return
@@ -88,9 +101,26 @@ function App() {
     setRunning(false); setStage(0)
     setNotice('已取消本次规划。原有任务和材料进度保持不变。')
   }
+  async function syncSourcePage() {
+    if (sourceSyncing) return
+    const url = sourceUrl.trim()
+    if (!url) { setSourceSyncError('先输入一个官网页面地址。'); return }
+    setSourceSyncing(true); setSourceSyncError(''); setSourceSyncInfo('')
+    try {
+      const response = await fetch('/api/sources', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) })
+      const payload = await response.json() as { ok?: boolean; error?: string; document?: Evidence }
+      if (!response.ok || !payload.ok || !payload.document) throw new Error(payload.error ?? '同步失败，请稍后重试。')
+      setLiveEvidence((current) => [payload.document!, ...current.filter((item) => item.id !== payload.document!.id)])
+      setSelectedEvidenceId(payload.document.id)
+      setSourceSyncInfo(`已加入资料库 · ${payload.document.id} · ${payload.document.paragraphs.length} 段摘要`)
+      setNotice('官网页面已同步为待核验证据。生成计划前仍会经过 Reviewer。')
+    } catch (error) {
+      setSourceSyncError(error instanceof Error ? error.message : '同步失败，请稍后重试。')
+    } finally { setSourceSyncing(false) }
+  }
   function runPlan() {
     if (running) return
-    const hits = retrieveEvidence(prompt)
+    const hits = retrieveEvidence(prompt, 8, allEvidence)
     const matchedTaskIds = matchTaskIds(prompt)
     const firstMatched = matchedTaskIds[0] ?? selectedTaskId
     const matchedTask = tasks.find((task) => task.id === firstMatched) ?? selectedTask
@@ -122,6 +152,7 @@ function App() {
   function resetDemo() {
     setTasks(initialTasks); setPrompt(quickPrompts[0].text); setAvailability('afternoon'); setStage(0)
     setRetrievalHits([]); setReviewResult(null); setHasRun(false); setNoEvidence(false); setSelectedTaskId('repair'); setSelectedEvidenceId('E-03')
+    setLiveEvidence([]); setSourceUrl(''); setSourceSyncError(''); setSourceSyncInfo('')
     setNotice('演示已重置。你的本地进度也已清空。')
     try { localStorage.removeItem('campusflow:progress:v2') } catch { /* private browsing can reject storage */ }
   }
@@ -154,7 +185,7 @@ function App() {
       <div className="app-layout">
         <aside className="sidebar" aria-label="工作区导航">
           <div className="workspace-switcher"><div className="workspace-avatar">C</div><div><strong>我的校园周</strong><span>通用合成校园资料</span></div><ChevronRight size={15} /></div>
-          <div className="sidebar-group"><span className="sidebar-label">工作区</span><a className="side-link active" href="#workspace"><ClipboardCheck size={16} />行动计划<span className="count-badge">{tasks.length}</span></a><a className="side-link" href="#calendar"><CalendarDays size={16} />本周日程</a><a className="side-link" href="#library"><BookOpen size={16} />知识资料<span className="count-badge soft">{evidence.length}</span></a></div>
+          <div className="sidebar-group"><span className="sidebar-label">工作区</span><a className="side-link active" href="#workspace"><ClipboardCheck size={16} />行动计划<span className="count-badge">{tasks.length}</span></a><a className="side-link" href="#calendar"><CalendarDays size={16} />本周日程</a><a className="side-link" href="#library"><BookOpen size={16} />知识资料<span className="count-badge soft">{allEvidence.length}</span></a></div>
           <div className="sidebar-group sidebar-note"><span className="sidebar-label">当前状态</span><div className="privacy-card"><ShieldCheck size={17} /><div><strong>隐私边界已开启</strong><p>资料在本地演示中处理。不会自动提交或写入外部系统。</p></div></div></div>
           <div className="sidebar-bottom"><button className="side-help"><Bell size={15} />演示提示<ChevronRight size={14} /></button><span>v0.2 · 2026.10</span></div>
         </aside>
@@ -164,7 +195,7 @@ function App() {
           <section className="week-strip" id="calendar" aria-label="本周进度"><div className="week-intro"><span className="eyebrow">本周进度</span><strong>{completedTasks}/{tasks.length}</strong><small>项已完成</small></div><div className="week-days"><div className="week-day muted"><span>周二</span><small>10/27</small></div><div className="week-day active"><span>周三</span><small>10/28 · 今天</small><i style={{ width: Math.max(18, progress) + '%' }} /></div><div className="week-day"><span>周四</span><small>10/29</small></div><div className="week-day"><span>周五</span><small>10/30 · 截止</small></div></div><div className="week-total"><strong>{progress}%</strong><span>完成度</span></div></section>
 
           <section className="workspace-grid" aria-label="计划工作台">
-            <section className="input-panel panel"><div className="section-heading"><div><span className="section-index">01</span><div><span className="eyebrow">输入目标</span><h2>你想完成什么？</h2></div></div><span className="quiet-tag">自然语言</span></div><label className="sr-only" htmlFor="goal-input">行动目标</label><textarea id="goal-input" name="goal" value={prompt} onChange={(event) => setPrompt(event.target.value.slice(0, 500))} placeholder="例如：我周三下午有空，帮我安排报到和报修…" /><div className="input-footer"><button className="upload-button" onClick={() => fileRef.current?.click()}><Paperclip size={15} />上传通知 / 截图</button><input ref={fileRef} type="file" accept=".txt,.png,.jpg,.jpeg,.pdf" hidden onChange={(event) => { void handleUpload(event.target.files?.[0]); event.target.value = '' }} /><span>{prompt.length}/500</span></div><div className="prompt-list"><div className="prompt-list-heading"><span>快速开始</span><span>点击填入</span></div>{quickPrompts.map((item) => <button key={item.label} onClick={() => setPrompt(item.text)}><span>{item.label}</span><ChevronRight size={14} /></button>)}</div><div className="availability-field"><div><span className="eyebrow">时间约束</span><strong>我什么时候有空？</strong></div><div className="availability-toggle" role="group" aria-label="可用时间"><button className={availability === 'afternoon' ? 'selected' : ''} onClick={() => setAvailability('afternoon')}>周三下午</button><button className={availability === 'evening' ? 'selected' : ''} onClick={() => setAvailability('evening')}>只有晚上</button></div></div><button className="primary-button generate-button" onClick={runPlan} disabled={running}>{running ? <><RefreshCw size={16} className="spin" />正在查证与规划…</> : <><Sparkles size={16} />生成我的行动计划<ArrowRight size={16} /></>}</button><p className="privacy-note"><ShieldCheck size={15} /><span>{packNotice} 当前不需要 API Key。</span></p></section>
+            <section className="input-panel panel"><div className="section-heading"><div><span className="section-index">01</span><div><span className="eyebrow">输入目标</span><h2>你想完成什么？</h2></div></div><span className="quiet-tag">自然语言</span></div><label className="sr-only" htmlFor="goal-input">行动目标</label><textarea id="goal-input" name="goal" value={prompt} onChange={(event) => setPrompt(event.target.value.slice(0, 500))} placeholder="例如：我周三下午有空，帮我安排报到和报修…" /><div className="input-footer"><button className="upload-button" onClick={() => fileRef.current?.click()}><Paperclip size={15} />上传通知 / 截图</button><input ref={fileRef} type="file" accept=".txt,.png,.jpg,.jpeg,.pdf" hidden onChange={(event) => { void handleUpload(event.target.files?.[0]); event.target.value = '' }} /><span>{prompt.length}/500</span></div><div className="prompt-list"><div className="prompt-list-heading"><span>快速开始</span><span>点击填入</span></div>{quickPrompts.map((item) => <button key={item.label} onClick={() => setPrompt(item.text)}><span>{item.label}</span><ChevronRight size={14} /></button>)}</div><div className="availability-field"><div><span className="eyebrow">时间约束</span><strong>我什么时候有空？</strong></div><div className="availability-toggle" role="group" aria-label="可用时间"><button className={availability === 'afternoon' ? 'selected' : ''} onClick={() => setAvailability('afternoon')}>周三下午</button><button className={availability === 'evening' ? 'selected' : ''} onClick={() => setAvailability('evening')}>只有晚上</button></div></div><button className="primary-button generate-button" onClick={runPlan} disabled={running}>{running ? <><RefreshCw size={16} className="spin" />正在查证与规划…</> : <><Sparkles size={16} />生成我的行动计划<ArrowRight size={16} /></>}</button><p className="privacy-note"><ShieldCheck size={15} /><span>{packNotice} 当前不需要 API Key。</span></p><div className="source-sync-card"><div className="source-sync-heading"><div><span className="eyebrow"><Globe2 size={12} />官网资料</span><strong>导入官网页面</strong></div><span className={sourceSyncEnabled ? 'source-sync-status ready' : 'source-sync-status'}>{sourceSyncEnabled === null ? '检查中' : sourceSyncEnabled ? '已启用' : '待配置'}</span></div><div className="source-sync-row"><label className="sr-only" htmlFor="source-url">官网页面地址</label><input id="source-url" type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://example.edu.cn/notice" /><button className="secondary-button" onClick={() => { void syncSourcePage() }} disabled={sourceSyncing || sourceSyncEnabled === false}>{sourceSyncing ? <LoaderCircle size={14} className="spin" /> : <Globe2 size={14} />}同步</button></div><p>只抓取白名单域名的单页摘要，来源会保留 URL；不会自动提交或写入学校系统。</p>{sourceSyncError && <div className="source-sync-error" role="alert">{sourceSyncError}</div>}{sourceSyncInfo && <div className="source-sync-success" role="status">{sourceSyncInfo}</div>}</div></section>
 
             <section className="plan-panel panel"><div className="panel-topline"><div><span className="section-index">02</span><div><span className="eyebrow">Agent 规划</span><h2>{noEvidence ? '示例行动队列' : '我的行动队列'}</h2></div></div><div className="plan-head-actions"><span className="plan-mode">演示规则</span><button className="more-button" aria-label="取消或重新生成计划" onClick={running ? stopPlanning : runPlan}>{running ? <X size={15} /> : <RefreshCw size={15} />}</button></div></div><div className="plan-summary"><div><strong>{tasks.length} 个行动</strong><span>预计 {Math.floor(tasks.reduce((sum, task) => sum + task.duration, 0) / 60)} 小时 {tasks.reduce((sum, task) => sum + task.duration, 0) % 60} 分</span></div><div className="plan-constraint"><Clock3 size={14} />{availability === 'evening' ? '仅晚上有空' : '周三下午有空'}</div></div><div className="agent-trace" aria-label="Agent 工作阶段">{stages.map((item, index) => { const Icon = item.icon; const active = stage >= index + 1; const event = trace[index]; return <div className={active ? 'trace-item active' : 'trace-item'} key={item.label}><div className="trace-icon">{event.state === 'warning' ? <CircleAlert size={14} /> : active && stage > index + 1 ? <Check size={14} /> : <Icon size={14} />}</div><span>{item.label}</span><small>{event.detail}</small></div> })}</div>{reviewResult && <div className={'review-banner ' + reviewResult.status} role="status"><div className="review-banner-icon">{reviewResult.status === 'pass' ? <ShieldCheck size={17} /> : <CircleAlert size={17} />}</div><div className="review-banner-copy"><div className="review-banner-heading"><strong>Reviewer · {reviewerLabel}</strong><span>{reviewResult.checkedTaskIds.length} 项行动 · {reviewResult.checkedEvidenceIds.length} 条依据</span></div><p>{reviewerLead}</p>{reviewResult.findings.length > 1 && <small>还有 {reviewResult.findings.length - 1} 项检查结果，展开详情前请先人工核对。</small>}</div></div>}{noEvidence && <><div className="no-evidence-banner"><CircleAlert size={17} /><div><strong>暂未找到足够依据</strong><p>系统不会为通用问题编造校园事实。补充通知、办理事项或截止时间后再试。</p></div></div><div className="stale-plan-note">下面保留上一份示例计划，未针对当前输入更新。补充依据后再生成。</div></>}<div className="task-list">{schedule.map((item, index) => <TaskCard key={item.task.id} item={item} index={index} selected={selectedTask.id === item.task.id} onSelect={selectTask} onToggle={updateTaskStatus} />)}</div><div className="plan-footer"><div className="footer-stat"><strong>{completedMaterials}<small>/{totalMaterials}</small></strong><span>材料已核对</span></div><div className="footer-stat"><strong>{tasks.filter((task) => task.evidence.length).length}<small>/{tasks.length}</small></strong><span>行动有依据</span></div><button className="secondary-button" onClick={() => setExportOpen(true)}><Download size={14} />导出清单</button></div></section>
 
@@ -173,7 +204,7 @@ function App() {
 
           <section className="activity-panel panel" id="about"><div className="activity-heading"><div><span className="section-index">04</span><div><span className="eyebrow">运行记录</span><h2>我为什么可以相信这份计划？</h2></div></div><span className="trace-id">trace · local-demo</span></div><div className="activity-grid">{trace.map((event, index) => <div className={event.state === 'warning' ? 'activity-item warning' : 'activity-item'} key={event.id}><span className="activity-number">0{index + 1}</span><div><strong>{event.label}</strong><p>{event.detail}</p></div><span className="activity-state">{event.state === 'warning' ? '需确认' : '已完成'}</span></div>)}</div><div className="activity-foot"><span><ShieldCheck size={14} />每个结论都能回到合成资料包中的来源。</span><span>当前使用关键词检索 + 规则排期，未调用外部模型。</span></div></section>
 
-          <section className="library-panel panel" id="library"><div className="library-heading"><div><span className="eyebrow">知识资料</span><h2>当前演示资料包</h2><p>{packNotice}</p></div><label className="library-search"><Search size={15} /><span className="sr-only">搜索资料</span><input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="搜索标题、主题或关键词…" /></label></div><div className="library-grid">{libraryResults.map((item) => <button className="library-card" key={item.id} onClick={() => setDrawerEvidence(item)}><div className="library-card-top"><span>{item.id}</span><small>{item.domain}</small></div><strong>{item.title}</strong><p>{item.text}</p><span className="library-card-foot">{item.locator}<ChevronRight size={13} /></span></button>)}</div></section>
+          <section className="library-panel panel" id="library"><div className="library-heading"><div><span className="eyebrow">知识资料</span><h2>当前演示资料包</h2><p>{packNotice} {liveEvidence.length ? `已加入 ${liveEvidence.length} 条官网摘要。` : ''}</p></div><label className="library-search"><Search size={15} /><span className="sr-only">搜索资料</span><input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="搜索标题、主题或关键词…" /></label></div><div className="library-grid">{libraryResults.map((item) => <button className="library-card" key={item.id} onClick={() => setDrawerEvidence(item)}><div className="library-card-top"><span>{item.id}</span><small>{item.domain}</small></div><strong>{item.title}</strong><p>{item.text}</p><span className="library-card-foot">{item.locator}<ChevronRight size={13} /></span></button>)}</div></section>
           <div className="status-toast" role="status" aria-live="polite"><span className="toast-dot" />{notice}</div>
         </main>
       </div>
