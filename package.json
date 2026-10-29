@@ -12,6 +12,7 @@
     "lint": "node scripts/lint.mjs",
     "test:e2e": "node tests/smoke.mjs",
     "test:source-sync": "node tests/source-sync.mjs",
+    "test:model-adapter": "node tests/model-adapter.mjs",
     "evaluate": "node scripts/evaluate_demo.mjs",
     "preflight": "python C:/Users/ThinkPad/.codex/skills/chuanzhi-ai-web-contest/scripts/check_submission.py ."
   }

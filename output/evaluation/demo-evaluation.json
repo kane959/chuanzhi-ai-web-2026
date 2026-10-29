@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-10-28T13:02:39.769Z",
+  "generatedAt": "2026-10-29T08:37:22.836Z",
   "mode": "demo",
-  "commit": "e92e9fa",
+  "commit": "a6cc447",
   "sourcePack": "campusflow-demo-v2",
   "rule": "local lexical retrieval + deterministic schedule + Reviewer checks; no external model or network call",
   "thresholds": {

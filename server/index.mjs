@@ -3,6 +3,7 @@ import { createServer } from 'node:http'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { allowedHostsFromEnv, publicConfig, syncSource } from './source-sync.mjs'
+import { createPlan, publicModelConfig } from './model-adapter.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const distRoot = join(root, 'prototype', 'dist')
@@ -25,7 +26,15 @@ const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 
 const server = createServer(async (req, res) => {
   const requestUrl = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
-  if (requestUrl.pathname === '/api/health') return json(res, 200, { ok: true, service: 'campusflow-api', sourceSync: publicConfig() })
+  if (requestUrl.pathname === '/api/health') return json(res, 200, { ok: true, service: 'campusflow-api', sourceSync: publicConfig(), model: publicModelConfig() })
+  if (requestUrl.pathname === '/api/plan') {
+    if (req.method !== 'POST') return json(res, 405, { error: '只支持 POST。' })
+    try {
+      const body = await readBody(req)
+      if (typeof body.goal !== 'string' || !body.goal.trim()) return json(res, 400, { ok: false, error: '缺少 goal。' })
+      return json(res, 200, { ok: true, plan: await createPlan(body) })
+    } catch (error) { return json(res, 400, { ok: false, error: error instanceof Error ? error.message : '规划失败。' }) }
+  }
   if (requestUrl.pathname === '/api/sources') {
     if (req.method === 'GET') return json(res, 200, publicConfig())
     if (req.method === 'OPTIONS') { res.writeHead(204, { allow: 'GET,POST,OPTIONS' }); return res.end() }

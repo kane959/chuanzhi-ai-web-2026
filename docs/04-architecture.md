@@ -1,4 +1,4 @@
-# CampusFlow 技术架构草案
+# CampusFlow 技术架构草案（可查证的校园事务行动协同智能体）
 
 ## 端到端数据流
 
@@ -76,3 +76,7 @@ type AgentEvent =
 当前服务端提供单页预览接口：`POST /api/sources`，请求体为 `{ "url": "https://..." }`。它只允许 `SYNC_ALLOWED_HOSTS` 中的 HTTPS/HTTP 域名，拒绝回环/内网地址、非标准端口、带用户名密码的 URL、超过 512 KB 的响应和超过 8 秒的请求。正文提取为标题、段落、更新时间、来源 URL 和关键词后返回给前端；默认不写入数据库，前端只在当前会话加入“待核验证据”。
 
 Vercel 部署使用 `api/health.js` 和 `api/sources.js`；本地长驻服务使用 `pnpm server`。生产环境还应在平台侧配置速率限制、日志脱敏和明确的域名授权，不能把它当成任意 URL 代理或全网爬虫。
+
+## 结构化模型适配层
+
+`POST /api/plan` 接收目标、可用时间和已召回证据。`MODEL_PROVIDER=demo` 时返回确定性的本地 Planner 结果，保证没有 API Key 也能完整演示；配置 OpenAI 兼容的 `MODEL_BASE_URL`、`MODEL_NAME` 与 `MODEL_API_KEY` 后，服务端才会请求真实模型。模型只允许返回结构化 JSON，失败、超时或字段不完整时自动回退到演示 Planner，并在响应中保留 `fallbackReason`。前端将模式、模型名和回退状态展示在 Agent 面板，Reviewer 仍是导出前的最后闸门。
