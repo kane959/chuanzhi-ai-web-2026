@@ -38,6 +38,14 @@
 
 ## 本地运行与预检
 
+## GitHub 公网访问
+
+仓库已包含 GitHub Actions Pages 工作流。新建公开仓库并推送 `main` 分支后，在仓库的 **Settings → Pages → Source** 选择 **GitHub Actions**；每次推送都会自动构建 `prototype/dist` 并发布到：
+
+`https://<你的用户名>.github.io/<仓库名>/`
+
+GitHub Pages 运行的是无 Key 演示模式，适合评委查看前端闭环。`/api/plan`、`/api/sources` 等服务端接口仍需部署到 Vercel 或其他 Node 平台；前端接口不可用时会保留本地演示流程，不影响核心演示。
+
 ```bash
 pnpm install --dir prototype
 pnpm dev
