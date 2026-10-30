@@ -2,7 +2,8 @@ import { allowedHostsFromEnv, publicConfig, syncSource } from '../server/source-
 
 function cors(res, req) {
   const origin = req.headers.origin
-  if (origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) res.setHeader('Access-Control-Allow-Origin', origin)
+  const allowed = [process.env.PUBLIC_WEB_ORIGIN, 'https://kane959.github.io', 'http://localhost:5173', 'http://127.0.0.1:5173'].filter(Boolean)
+  if (origin && allowed.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin)
   res.setHeader('Access-Control-Allow-Headers', 'content-type, x-source-sync-token')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Vary', 'Origin')

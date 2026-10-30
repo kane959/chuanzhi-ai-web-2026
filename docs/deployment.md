@@ -25,6 +25,9 @@ npx vercel --yes
 - `pnpm build`
 - 静态产物目录 `prototype/dist`
 - `/api/health` 和 `/api/sources` 两个 Node Functions
+- `/api/plan` 结构化 Planner Function
+
+GitHub Pages 是静态托管，不能执行这些 API。部署 Vercel 后，将 Vercel 项目域名设置为 GitHub 仓库变量 `VITE_API_BASE_URL`，并设置 Vercel 环境变量 `PUBLIC_WEB_ORIGIN=https://kane959.github.io`。这样 Pages 前端会跨域访问 Vercel API，官网同步不再请求 Pages 自身的 404 路径。
 
 ## 启用官网单页同步
 

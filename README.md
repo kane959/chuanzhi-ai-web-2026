@@ -44,7 +44,7 @@
 
 `https://<你的用户名>.github.io/<仓库名>/`
 
-GitHub Pages 运行的是无 Key 演示模式，适合评委查看前端闭环。`/api/plan`、`/api/sources` 等服务端接口仍需部署到 Vercel 或其他 Node 平台；前端接口不可用时会保留本地演示流程，不影响核心演示。
+GitHub Pages 运行的是前端静态页面。要启用“导入官网网址 → 同步”和服务端 Planner，需要把本仓库根目录部署到 Vercel，并在 GitHub 仓库 **Settings → Secrets and variables → Actions → Variables** 添加 `VITE_API_BASE_URL=https://你的-vercel-域名`；Pages 工作流会把该地址注入前端构建。没有配置时仍可使用本地资料和演示 Planner，但官网同步按钮会显示 API 未配置。
 
 ```bash
 pnpm install --dir prototype

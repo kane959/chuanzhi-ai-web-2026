@@ -7,6 +7,7 @@ import {
 import { evidence, initialTasks, packNotice, quickPrompts } from './data'
 import { createChecklist, matchTaskIds, missingRequired, retrieveEvidence, reviewPlan, scheduleTasks } from './lib/planner'
 import { restoreProgress, saveProgress } from './lib/storage'
+import { apiBaseUrl, apiUrl } from './lib/api'
 import type { Availability, Evidence, RetrievalHit, ReviewResult, ScheduledTask, Task, TraceEvent } from './types'
 
 const stages = [
@@ -67,7 +68,7 @@ function App() {
 
   useEffect(() => { saveProgress(tasks) }, [tasks])
   useEffect(() => {
-    fetch('/api/sources').then((response) => response.ok ? response.json() : Promise.reject(new Error('not configured')))
+    fetch(apiUrl('/api/sources')).then((response) => response.ok ? response.json() : Promise.reject(new Error('not configured')))
       .then((payload: { enabled?: boolean }) => setSourceSyncEnabled(Boolean(payload.enabled)))
       .catch(() => setSourceSyncEnabled(false))
   }, [])
@@ -108,7 +109,7 @@ function App() {
     if (!url) { setSourceSyncError('先输入一个官网页面地址。'); return }
     setSourceSyncing(true); setSourceSyncError(''); setSourceSyncInfo('')
     try {
-      const response = await fetch('/api/sources', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) })
+      const response = await fetch(apiUrl('/api/sources'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) })
       const payload = await response.json() as { ok?: boolean; error?: string; document?: Evidence }
       if (!response.ok || !payload.ok || !payload.document) throw new Error(payload.error ?? '同步失败，请稍后重试。')
       setLiveEvidence((current) => [payload.document!, ...current.filter((item) => item.id !== payload.document!.id)])
@@ -130,7 +131,7 @@ function App() {
     timerRefs.current.forEach((timer) => window.clearTimeout(timer))
     setRetrievalHits(hits); setReviewResult(review); setHasRun(true); setNoEvidence(hits.length === 0 || matchedTaskIds.length === 0)
     setModelPlanLabel('结构化 Planner · 连接中')
-    void fetch('/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: prompt, availability, evidence: hits.map((hit) => ({ id: hit.evidence.id, title: hit.evidence.title, excerpt: hit.evidence.text })) }) })
+    void fetch(apiUrl('/api/plan'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: prompt, availability, evidence: hits.map((hit) => ({ id: hit.evidence.id, title: hit.evidence.title, excerpt: hit.evidence.text })) }) })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('planner unavailable')))
       .then((payload: { plan?: { mode?: string; model?: string; fallbackReason?: string } }) => {
         const plan = payload.plan
@@ -138,7 +139,7 @@ function App() {
         setModelPlanLabel(plan.mode === 'provider' ? `真实模型 · ${plan.model ?? '兼容接口'}` : `演示 Planner · ${plan.model ?? '本地规则'}`)
         setNotice(plan.fallbackReason ? `真实模型暂不可用，已安全回退演示模式：${plan.fallbackReason}` : '结构化 Planner 已返回结果，Reviewer 仍是最终闸门。')
       })
-      .catch(() => setModelPlanLabel('演示 Planner · 无 Key 可运行'))
+      .catch(() => setModelPlanLabel(apiBaseUrl ? '演示 Planner · API 不可用' : '演示 Planner · 无 Key 可运行'))
     setSelectedTaskId(matchedTask.id)
     setSelectedEvidenceId(hits.find((hit) => matchedTask.evidence.includes(hit.evidence.id))?.evidence.id ?? matchedTask.evidence[0])
     setRunning(true); setStage(1)
@@ -202,7 +203,7 @@ function App() {
         </aside>
 
         <main id="main-content" className="main-content">
-          <section className="workspace-header" id="workspace"><div><div className="breadcrumb"><span>CampusFlow</span><ChevronRight size={13} /><strong>行动工作台</strong></div><h1>把校园事务变成可查证的行动计划。</h1><p>CampusFlow：可查证的校园事务行动协同智能体。把通知里的截止时间、地点和材料，变成一份你能检查的计划。</p></div><div className="header-status"><span><span className="status-dot" />资料包已加载</span><span><ShieldCheck size={14} />仅本地演示</span></div></section>
+          <section className="workspace-header" id="workspace"><div><div className="breadcrumb"><span>CampusFlow</span><ChevronRight size={13} /><strong>行动工作台</strong></div><h1>把校园事务变成可查证的行动计划。</h1><p>CampusFlow：可查证的校园事务行动协同智能体。把通知里的截止时间、地点和材料，变成一份你能检查的计划。</p></div><div className="header-status"><span><span className="status-dot" />资料包已加载</span><span><ShieldCheck size={14} />{apiBaseUrl ? 'API 已配置' : '仅本地演示'}</span></div></section>
           <section className="week-strip" id="calendar" aria-label="本周进度"><div className="week-intro"><span className="eyebrow">本周进度</span><strong>{completedTasks}/{tasks.length}</strong><small>项已完成</small></div><div className="week-days"><div className="week-day muted"><span>周二</span><small>10/27</small></div><div className="week-day active"><span>周三</span><small>10/28 · 今天</small><i style={{ width: Math.max(18, progress) + '%' }} /></div><div className="week-day"><span>周四</span><small>10/29</small></div><div className="week-day"><span>周五</span><small>10/30 · 截止</small></div></div><div className="week-total"><strong>{progress}%</strong><span>完成度</span></div></section>
 
           <section className="workspace-grid" aria-label="计划工作台">
@@ -213,7 +214,7 @@ function App() {
             <aside className="detail-panel panel" id="detail-panel"><div className="detail-heading"><div><span className="section-index">03</span><div><span className="eyebrow">当前事项</span><h2>{selectedTask.title}</h2></div></div><span className={selectedSchedule.conflict ? 'conflict-tag' : 'ready-tag'}>{selectedSchedule.conflict ? '待协调' : '可安排'}</span></div><div className="selected-schedule"><div className="schedule-icon"><CalendarDays size={17} /></div><div><strong>{selectedSchedule.day} · {selectedSchedule.time}</strong><span><MapPin size={13} />{selectedTask.location}</span></div></div><div className="detail-reason"><Info size={15} /><p>{selectedSchedule.reason}</p></div><div className="detail-section"><div className="detail-section-title"><strong>材料清单</strong><span>{selectedTask.materials.filter((item) => item.checked).length}/{selectedTask.materials.length}</span></div><div className="material-list">{selectedTask.materials.map((item) => <label className={item.checked ? 'material-row checked' : 'material-row'} key={item.id}><input type="checkbox" checked={item.checked} onChange={() => toggleMaterial(selectedTask.id, item.id)} /><span className="check-box">{item.checked && <Check size={12} />}</span><span>{item.label}</span>{item.required ? <em>必备</em> : <em className="optional">按需</em>}</label>)}</div></div><div className="detail-section evidence-section"><div className="detail-section-title"><strong>支持这一步的依据</strong><span>{relevantEvidence.length} 条</span></div><div className="evidence-mini-list">{relevantEvidence.map((hit) => <button className={selectedEvidence.id === hit.evidence.id ? 'evidence-mini selected' : 'evidence-mini'} key={hit.evidence.id} onClick={() => setSelectedEvidenceId(hit.evidence.id)}><span className="evidence-mini-id">{hit.evidence.id}</span><span><strong>{hit.evidence.title}</strong><small>{hit.evidence.locator}</small></span><ChevronRight size={14} /></button>)}</div><button className="text-link" onClick={() => setDrawerEvidence(selectedEvidence)}><FileText size={14} />打开原文定位<ExternalLink size={13} /></button></div><div className="confirm-note"><ShieldCheck size={16} /><span>提交、写入日历和发送提醒都需要你的确认。</span></div></aside>
           </section>
 
-          <section className="activity-panel panel" id="about"><div className="activity-heading"><div><span className="section-index">04</span><div><span className="eyebrow">可解释运行记录</span><h2>每一步都有证据，也有刹车。</h2></div></div><span className="trace-id">trace · local-demo</span></div><div className="activity-grid">{trace.map((event, index) => <div className={event.state === 'warning' ? 'activity-item warning' : 'activity-item'} key={event.id}><span className="activity-number">0{index + 1}</span><div><strong>{event.label}</strong><p>{event.detail}</p></div><span className="activity-state">{event.state === 'warning' ? '需确认' : '已完成'}</span></div>)}</div><div className="activity-proof" aria-label="AI 能力证据"><div><strong>RAG</strong><span>来源定位与更新时间</span></div><div><strong>Agent</strong><span>任务拆解与时间约束</span></div><div><strong>Tools</strong><span>排期、材料和来源同步</span></div><div><strong>Reviewer</strong><span>冲突、隐私与无依据拒答</span></div></div><div className="activity-foot"><span><ShieldCheck size={14} />每个结论都能回到合成资料包中的来源。</span><span>当前使用关键词检索 + 规则排期，未调用外部模型。</span></div></section>
+          <section className="activity-panel panel" id="about"><div className="activity-heading"><div><span className="section-index">04</span><div><span className="eyebrow">可解释运行记录</span><h2>每一步都有证据，也有刹车。</h2></div></div><span className="trace-id">trace · {apiBaseUrl ? 'api-connected' : 'local-demo'}</span></div><div className="activity-grid">{trace.map((event, index) => <div className={event.state === 'warning' ? 'activity-item warning' : 'activity-item'} key={event.id}><span className="activity-number">0{index + 1}</span><div><strong>{event.label}</strong><p>{event.detail}</p></div><span className="activity-state">{event.state === 'warning' ? '需确认' : '已完成'}</span></div>)}</div><div className="activity-proof" aria-label="AI 能力证据"><div><strong>RAG</strong><span>来源定位与更新时间</span></div><div><strong>Agent</strong><span>任务拆解与时间约束</span></div><div><strong>Tools</strong><span>排期、材料和来源同步</span></div><div><strong>Reviewer</strong><span>冲突、隐私与无依据拒答</span></div></div><div className="activity-foot"><span><ShieldCheck size={14} />每个结论都能回到合成资料包中的来源。</span><span>{apiBaseUrl ? '官网摘要与 Planner 通过独立 API 服务。' : '当前使用关键词检索 + 规则排期，未调用外部模型。'}</span></div></section>
 
           <section className="library-panel panel" id="library"><div className="library-heading"><div><span className="eyebrow">知识资料</span><h2>当前演示资料包</h2><p>{packNotice} {liveEvidence.length ? `已加入 ${liveEvidence.length} 条官网摘要。` : ''}</p></div><label className="library-search"><Search size={15} /><span className="sr-only">搜索资料</span><input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="搜索标题、主题或关键词…" /></label></div><div className="library-grid">{libraryResults.map((item) => <button className="library-card" key={item.id} onClick={() => setDrawerEvidence(item)}><div className="library-card-top"><span>{item.id}</span><small>{item.domain}</small></div><strong>{item.title}</strong><p>{item.text}</p><span className="library-card-foot">{item.locator}<ChevronRight size={13} /></span></button>)}</div></section>
           <div className="status-toast" role="status" aria-live="polite"><span className="toast-dot" />{notice}</div>
