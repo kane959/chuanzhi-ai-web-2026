@@ -7,6 +7,8 @@ COPY prototype/package.json prototype/
 RUN pnpm --dir prototype install --no-frozen-lockfile
 
 COPY . .
+ARG VITE_API_BASE_URL=/
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN pnpm --dir prototype build
 
 FROM node:20-bookworm-slim

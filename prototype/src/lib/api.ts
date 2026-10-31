@@ -1,4 +1,6 @@
-const configuredBase = String(import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\/$/, '')
+const requestedBase = String(import.meta.env.VITE_API_BASE_URL ?? '').trim()
+// A full-stack deployment uses its own origin; an empty value keeps static demos offline.
+const configuredBase = requestedBase === '/' ? window.location.origin : requestedBase.replace(/\/$/, '')
 
 export const apiBaseUrl = configuredBase
 export const apiUrl = (path: string) => `${configuredBase}${path}`

@@ -35,7 +35,49 @@ http://ECS公网IP:8080/api/health
 
 ## FC 3.0 部署
 
-在函数计算控制台创建函数：
+### 直接上传 ZIP（无需 Docker）
+
+先以同源接口模式构建前端，避免云端网页仍请求 Vercel：
+
+```powershell
+$env:VITE_API_BASE_URL='/'
+pnpm build
+```
+
+ZIP 根目录仅放 `server/` 和 `prototype/dist/`，不要包含 `.env`、模型密钥或开发依赖。服务端使用 Node 内置模块，无需上传 `node_modules`。
+
+在杭州地域创建 Web 函数，使用以下配置：
+
+| 配置 | 值 |
+| --- | --- |
+| 运行环境 | 自定义运行时 → Node.js → Node.js 22 / Debian 11 |
+| 启动命令 | `node server/index.mjs` |
+| 监听端口 | `8080` |
+| 最小实例数 | `0`（减少闲置资源费用，首次访问会冷启动） |
+| CPU / 内存 / 磁盘 | `0.35 vCPU` / `0.5 GB` / `512 MB` |
+| 单实例并发 | `20` |
+| 超时 | `60` 秒 |
+
+环境变量示例（白名单可按实际演示资料调整）：
+
+```json
+{
+  "PORT": "8080",
+  "HOST": "0.0.0.0",
+  "TZ": "Asia/Shanghai",
+  "MODEL_PROVIDER": "demo",
+  "CORS_ALLOWED_ORIGINS": "https://kane959.github.io",
+  "SYNC_ALLOWED_HOSTS": "moe.gov.cn,sysu.edu.cn,scut.edu.cn"
+}
+```
+
+`PORT` 必须与监听端口一致。`MODEL_PROVIDER=demo` 不会调用付费模型；这不免除 FC 计算和流量费用。最小实例数为 0 也不是费用上限，公开服务应另外限制最大实例数并设置费用提醒。
+
+部署后先检查 `/api/health`、`/api/sources` 和首页。默认域名是否允许 HTML 在浏览器内展示需要实测；阿里云的 HTTP 触发器可能对默认域名添加附件下载响应头，参见[官方说明](https://help.aliyun.com/zh/functioncompute/return-results-forcibly-downloaded-when-i-access-an-http-function-through-a-browser)。如果出现强制下载，需要绑定合规的自定义域名；中国大陆节点的自定义域名通常需要备案。API 返回成功不能替代网页打开验证。
+
+### 容器方式
+
+也可以在函数计算控制台创建容器函数：
 
 1. 选择与用户接近的国内地域，创建 Web 函数，运行时选择 Docker 镜像。
 2. 从 GitHub 构建镜像，或在本地构建后推送到阿里云容器镜像服务 ACR。
