@@ -1,0 +1,14 @@
+node_modules
+prototype/node_modules
+prototype/dist
+.git
+.github
+.vercel
+.playwright-cli
+output
+video_frames
+research/raw
+*.log
+.env
+.env.*
+!.env.example

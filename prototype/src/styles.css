@@ -95,6 +95,9 @@ textarea::placeholder, input::placeholder { color: var(--muted-2); }
 .time-options strong, .time-options small { display: block; }
 .time-options strong { font-size: 16px; font-weight: 500; }
 .time-options small { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.custom-time-option { flex-wrap: wrap; }
+.custom-time-option > span { flex: 1; min-width: 150px; }
+.custom-time-input { border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px 10px; color: var(--ink); background: white; }
 .step-note { margin: 16px 0 0; font-size: 13px; color: var(--muted); }
 .result-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
 .result-toolbar > span { font-size: 12px; color: var(--muted); flex: 1; }
@@ -151,10 +154,14 @@ textarea::placeholder, input::placeholder { color: var(--muted-2); }
 .detail-section { margin-top: 24px; }
 .detail-section-title { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; margin-bottom: 10px; }
 .detail-section-title span { color: var(--muted); font-size: 12px; }
-.material-row { display: flex; gap: 8px; align-items: center; padding: 10px 0; font-size: 14px; cursor: pointer; }
+.material-item { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 10px; align-items: center; }
+.material-row { display: flex; gap: 8px; align-items: center; padding: 10px 0; font-size: 14px; cursor: pointer; min-width: 0; }
 .material-row input { accent-color: var(--green); width: 18px; height: 18px; margin: 0; }
 .check-box { display: none; }
 .material-row em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--muted); }
+.material-add { border: 0; background: none; color: var(--green); font-size: 12px; padding: 8px 0; white-space: nowrap; }
+.material-add:hover { text-decoration: underline; }
+.material-file-name { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; padding: 0 0 6px 26px; }
 .evidence-mini-list { display: flex; flex-direction: column; gap: 8px; }
 .evidence-mini { width: 100%; display: grid; grid-template-columns: 36px minmax(0,1fr) 14px; gap: 8px; align-items: center; text-align: left; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: white; }
 .evidence-mini:hover, .evidence-mini.selected { border-color: #93b19f; }

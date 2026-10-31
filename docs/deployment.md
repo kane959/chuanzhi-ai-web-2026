@@ -1,5 +1,9 @@
 # 公网访问与官网同步
 
+## 阿里云国内部署
+
+要让中国大陆用户不依赖 `*.vercel.app`，推荐使用阿里云 FC 3.0 或 ECS。仓库根目录提供了可复现的 `Dockerfile`，详细步骤见 [`deploy/alibaba/README.md`](../deploy/alibaba/README.md)。部署后先访问 `/api/health`，再把后端地址写入 GitHub Actions 变量 `VITE_API_BASE_URL`，并设置 `CORS_ALLOWED_ORIGINS=https://kane959.github.io`。大陆节点绑定自有域名通常还需要 ICP 备案；在没有备案域名时，先用阿里云公网地址验证服务，再办理备案和 HTTPS。
+
 ## 临时评委链接
 
 Vercel CLI 可以在未登录状态创建临时预览：
@@ -27,7 +31,7 @@ npx vercel --yes
 - `/api/health` 和 `/api/sources` 两个 Node Functions
 - `/api/plan` 结构化 Planner Function
 
-GitHub Pages 是静态托管，不能执行这些 API。部署 Vercel 后，将 Vercel 项目域名设置为 GitHub 仓库变量 `VITE_API_BASE_URL`，并设置 Vercel 环境变量 `PUBLIC_WEB_ORIGIN=https://kane959.github.io`。这样 Pages 前端会跨域访问 Vercel API，官网同步不再请求 Pages 自身的 404 路径。
+GitHub Pages 是静态托管，不能执行这些 API。部署后，将后端域名设置为 GitHub 仓库变量 `VITE_API_BASE_URL`，并设置服务端环境变量 `CORS_ALLOWED_ORIGINS=https://kane959.github.io`（也可设置 `PUBLIC_WEB_ORIGIN`）。这样 Pages 前端会跨域访问 API，官网同步不再请求 Pages 自身的 404 路径。
 
 ## 启用官网单页同步
 

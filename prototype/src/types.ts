@@ -1,5 +1,5 @@
 export type TaskStatus = 'todo' | 'done'
-export type Availability = 'morning' | 'afternoon' | 'evening' | 'weekend'
+export type Availability = 'morning' | 'afternoon' | 'evening' | 'weekend' | 'custom'
 export type Material = { id: string; label: string; required: boolean; checked: boolean }
 export type Task = {
   id: string; title: string; detail: string; location: string; status: TaskStatus

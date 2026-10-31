@@ -25,6 +25,7 @@
 - `server/`、`api/`：单页官网资料同步服务；白名单、大小/超时限制、来源 URL 和 SSRF 防护。
 - `server/model-adapter.mjs`、`api/plan.js`：结构化 Planner 适配层；无 Key 演示模式与 OpenAI 兼容接口可切换，失败自动回退。
 - `docs/deployment.md`：公网预览、长期部署和官网同步配置说明。
+- `deploy/alibaba/README.md`：阿里云 FC/ECS 国内部署、CORS 和验证步骤。
 - `research/`：原始抓取结果、竞品 README、附件观察记录。
 - `research/2025-national-benchmark.md`：去年公开国赛作品的核对记录与可迁移启发。
 
@@ -44,7 +45,7 @@
 
 `https://<你的用户名>.github.io/<仓库名>/`
 
-GitHub Pages 运行的是前端静态页面。要启用“导入官网网址 → 同步”和服务端 Planner，需要把本仓库根目录部署到 Vercel，并在 GitHub 仓库 **Settings → Secrets and variables → Actions → Variables** 添加 `VITE_API_BASE_URL=https://你的-vercel-域名`；Pages 工作流会把该地址注入前端构建。没有配置时仍可使用本地资料和演示 Planner，但官网同步按钮会显示 API 未配置。
+GitHub Pages 运行的是前端静态页面。要启用“导入官网网址 → 同步”和服务端 Planner，需要把本仓库根目录部署到阿里云 FC/ECS（也可部署到 Vercel），然后在 GitHub 仓库 **Settings → Secrets and variables → Actions → Variables** 添加 `VITE_API_BASE_URL=https://你的后端域名`；Pages 工作流会把该地址注入前端构建。没有配置时仍可使用本地资料和演示 Planner，但官网同步按钮会显示 API 未配置。阿里云部署配置见 [`deploy/alibaba/README.md`](deploy/alibaba/README.md)。
 
 ```bash
 pnpm install --dir prototype

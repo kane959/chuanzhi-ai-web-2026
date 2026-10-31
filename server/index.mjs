@@ -9,6 +9,23 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const distRoot = join(root, 'prototype', 'dist')
 const port = Number(process.env.PORT ?? 8787)
 const host = process.env.HOST ?? '0.0.0.0'
+const defaultCorsOrigins = ['https://kane959.github.io', 'http://localhost:5173', 'http://127.0.0.1:5173']
+const corsOrigins = [...new Set([
+  ...defaultCorsOrigins,
+  ...String(process.env.CORS_ALLOWED_ORIGINS ?? '').split(',').map((origin) => origin.trim()).filter(Boolean),
+  ...String(process.env.PUBLIC_WEB_ORIGIN ?? '').split(',').map((origin) => origin.trim()).filter(Boolean),
+])]
+
+const applyCors = (req, res) => {
+  const origin = req.headers.origin
+  if (origin && corsOrigins.includes(origin)) {
+    res.setHeader('access-control-allow-origin', origin)
+    res.setHeader('vary', 'Origin')
+  }
+  res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS')
+  res.setHeader('access-control-allow-headers', 'content-type')
+  res.setHeader('access-control-max-age', '600')
+}
 
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
@@ -26,6 +43,10 @@ const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 
 const server = createServer(async (req, res) => {
   const requestUrl = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+  if (requestUrl.pathname.startsWith('/api/')) {
+    applyCors(req, res)
+    if (req.method === 'OPTIONS') { res.writeHead(204); return res.end() }
+  }
   if (requestUrl.pathname === '/api/health') return json(res, 200, { ok: true, service: 'campusflow-api', sourceSync: publicConfig(), model: publicModelConfig() })
   if (requestUrl.pathname === '/api/plan') {
     if (req.method !== 'POST') return json(res, 405, { error: '只支持 POST。' })
@@ -37,7 +58,6 @@ const server = createServer(async (req, res) => {
   }
   if (requestUrl.pathname === '/api/sources') {
     if (req.method === 'GET') return json(res, 200, publicConfig())
-    if (req.method === 'OPTIONS') { res.writeHead(204, { allow: 'GET,POST,OPTIONS' }); return res.end() }
     if (req.method !== 'POST') return json(res, 405, { error: '只支持 GET 或 POST。' })
     try {
       const body = await readBody(req)

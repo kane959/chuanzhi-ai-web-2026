@@ -26,13 +26,22 @@ export function matchTaskIds(query: string): string[] {
   return groups.filter(([, pattern]) => pattern.test(query)).map(([id]) => id)
 }
 
-export function scheduleTasks(tasks: Task[], availability: Availability): ScheduledTask[] {
-  let cursor = availability === 'morning' ? 9 * 60 : availability === 'evening' ? 19 * 60 : availability === 'weekend' ? 10 * 60 : 14 * 60
+function customTimeMinutes(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value)
+  if (!match) return 14 * 60
+  const hours = Number(match[1]); const minutes = Number(match[2])
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59 ? hours * 60 + minutes : 14 * 60
+}
+
+export function scheduleTasks(tasks: Task[], availability: Availability, customTime = '14:00'): ScheduledTask[] {
+  let cursor = availability === 'morning' ? 9 * 60 : availability === 'evening' ? 19 * 60 : availability === 'weekend' ? 10 * 60 : availability === 'custom' ? customTimeMinutes(customTime) : 14 * 60
   const day = availability === 'weekend' ? '周六' : '周三'
   const format = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
   return tasks.map((task) => {
-    if (task.kind === 'onsite' && availability === 'evening') {
-      return { task, day: '待协调', time: '需要白天时段', conflict: true, reason: '你的空闲时间在 19:00 后，校园卡窗口在 17:00 关闭（E-02）。请另选白天时段。' }
+    const onsiteOutsideWindow = task.kind === 'onsite' && (availability === 'evening' || (availability === 'custom' && cursor >= 17 * 60))
+    if (onsiteOutsideWindow) {
+      const timeLabel = availability === 'custom' ? `${format(cursor)} 后` : '19:00 后'
+      return { task, day: '待协调', time: '需要白天时段', conflict: true, reason: `你的空闲时间在 ${timeLabel}，校园卡窗口在 17:00 关闭（E-02）。请另选白天时段。` }
     }
     if (task.id === 'grant') {
       return { task, day: '周四', time: '19:00–20:00', conflict: false, reason: '材料准备可在线完成；预留周五 17:00 截止前的核对时间（E-07）。' }
@@ -85,12 +94,13 @@ export function reviewPlan(query: string, tasks: Task[], schedule: ScheduledTask
   return { status, findings, checkedTaskIds: checkedTasks.map((task) => task.id), checkedEvidenceIds }
 }
 
-export function createChecklist(schedule: ScheduledTask[], availability: Availability): string {
+export function createChecklist(schedule: ScheduledTask[], availability: Availability, customTime = '14:00'): string {
+  const constraint = availability === 'evening' ? '仅晚上有空' : availability === 'weekend' ? '周末有空' : availability === 'custom' ? `自定义时间 ${customTime} 有空` : availability === 'morning' ? '上午有空' : '周三下午有空'
   return [
     '# CampusFlow 行动清单', '',
     '通用合成校园资料，仅供体验，不代表任何学校官方通知。',
     '样例周：2026-10-28 至 2026-10-30。',
-    `空闲约束：${availability === 'evening' ? '仅晚上有空' : '周三下午有空'}。`, '',
+    `空闲约束：${constraint}。`, '',
     ...schedule.flatMap(({ task, day, time, conflict, reason }, index) => [
       `## ${index + 1}. ${task.title}${task.status === 'done' ? '（本地已完成）' : ''}`, '',
       `安排：${day} ${time}（建议排期）`, `地点：${task.location}`,
