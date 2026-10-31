@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowRight, Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight, CircleAlert,
-  ClipboardCheck, Clock3, Download, ExternalLink, FileText, Globe2, Info, LoaderCircle, MapPin, Menu,
-  Paperclip, Play, RefreshCw, Search, ShieldCheck, Sparkles, X,
+  ArrowRight, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight, CircleAlert,
+  ClipboardCheck, Clock3, Download, ExternalLink, FileText, Globe2, Info, LoaderCircle, MapPin,
+  Paperclip, RefreshCw, Search, ShieldCheck, Sparkles, X,
 } from 'lucide-react'
 import { evidence, initialTasks, packNotice, quickPrompts } from './data'
 import { createChecklist, matchTaskIds, missingRequired, retrieveEvidence, reviewPlan, scheduleTasks } from './lib/planner'
@@ -20,7 +20,7 @@ const stages = [
 
 function App() {
   const [tasks, setTasks] = useState<Task[]>(() => restoreProgress(initialTasks))
-  const [prompt, setPrompt] = useState(quickPrompts[0].text)
+  const [prompt, setPrompt] = useState('')
   const [availability, setAvailability] = useState<Availability>('afternoon')
   const [stage, setStage] = useState(0)
   const [running, setRunning] = useState(false)
@@ -37,10 +37,13 @@ function App() {
   const [modelPlanLabel, setModelPlanLabel] = useState('演示规则 · 可回退')
   const [hasRun, setHasRun] = useState(false)
   const [noEvidence, setNoEvidence] = useState(false)
-  const [notice, setNotice] = useState('本地演示已就绪。输入一个目标，看看它如何变成可执行的周计划。')
+  const [notice, setNotice] = useState('')
   const [drawerEvidence, setDrawerEvidence] = useState<Evidence | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [view, setView] = useState<'workspace' | 'library' | 'about'>('workspace')
+  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [inputError, setInputError] = useState('')
+  const planRequest = useRef(0)
   const [libraryQuery, setLibraryQuery] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const timerRefs = useRef<number[]>([])
@@ -54,7 +57,6 @@ function App() {
   const completedTasks = tasks.filter((task) => task.status === 'done').length
   const completedMaterials = tasks.flatMap((task) => task.materials).filter((item) => item.checked).length
   const totalMaterials = tasks.flatMap((task) => task.materials).length
-  const progress = Math.round((completedTasks / tasks.length) * 100)
   const relevantEvidence = useMemo(() => {
     const ids = new Set(selectedTask.evidence)
     const ranked = retrievalHits.filter((hit) => ids.has(hit.evidence.id))
@@ -83,6 +85,13 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [drawerEvidence, exportOpen])
 
+  useEffect(() => { document.getElementById('screen-title')?.focus({ preventScroll: true }) }, [view, step])
+
+  function nextStep() {
+    if (!prompt.trim()) { setInputError('先填写要办的事，或选择下方示例。'); document.getElementById('goal-input')?.focus(); return }
+    setInputError(''); setNotice(''); setStep(2)
+  }
+
   function selectTask(task: Task) {
     setSelectedTaskId(task.id)
     setSelectedEvidenceId(task.evidence[0])
@@ -101,6 +110,7 @@ function App() {
   function stopPlanning() {
     timerRefs.current.forEach((timer) => window.clearTimeout(timer))
     timerRefs.current = []
+    planRequest.current += 1
     setRunning(false); setStage(0)
     setNotice('已取消本次规划。原有任务和材料进度保持不变。')
   }
@@ -123,6 +133,9 @@ function App() {
   }
   function runPlan() {
     if (running) return
+    if (!prompt.trim()) { setStep(1); nextStep(); return }
+    setStep(3); setNotice('');
+    const requestId = ++planRequest.current
     const hits = retrieveEvidence(prompt, 8, allEvidence)
     const matchedTaskIds = matchTaskIds(prompt)
     const firstMatched = matchedTaskIds[0] ?? selectedTaskId
@@ -135,12 +148,14 @@ function App() {
     void fetchApi('/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: prompt, availability, evidence: hits.map((hit) => ({ id: hit.evidence.id, title: hit.evidence.title, excerpt: hit.evidence.text })) }) })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('planner unavailable')))
       .then((payload: { plan?: { mode?: string; model?: string; fallbackReason?: string } }) => {
+        if (requestId !== planRequest.current) return
         const plan = payload.plan
         if (!plan) throw new Error('planner unavailable')
         setModelPlanLabel(plan.mode === 'provider' ? `真实模型 · ${plan.model ?? '兼容接口'}` : `演示 Planner · ${plan.model ?? '本地规则'}`)
         setNotice(plan.fallbackReason ? `真实模型暂不可用，已安全回退演示模式：${plan.fallbackReason}` : '结构化 Planner 已返回结果，Reviewer 仍是最终闸门。')
       })
       .catch((error) => {
+        if (requestId !== planRequest.current) return
         setModelPlanLabel(apiBaseUrl ? '演示 Planner · API 不可用' : '演示 Planner · 无 Key 可运行')
         if (apiBaseUrl) setNotice(error instanceof Error ? error.message : '后端暂时不可用，已回退本地演示。')
       })
@@ -166,10 +181,13 @@ function App() {
     setNotice('已记录文件名。当前版本只对文本通知做本地读取，图片/PDF 解析会在后续版本接入。')
   }
   function resetDemo() {
-    setTasks(initialTasks); setPrompt(quickPrompts[0].text); setAvailability('afternoon'); setStage(0)
+    timerRefs.current.forEach((timer) => window.clearTimeout(timer))
+    planRequest.current += 1
+    setRunning(false); setStep(1); setView('workspace'); setInputError('')
+    setTasks(initialTasks); setPrompt(''); setAvailability('afternoon'); setStage(0)
     setRetrievalHits([]); setReviewResult(null); setHasRun(false); setNoEvidence(false); setSelectedTaskId('repair'); setSelectedEvidenceId('E-03')
     setLiveEvidence([]); setSourceUrl(''); setSourceSyncError(''); setSourceSyncInfo(''); setModelPlanLabel('演示规则 · 可回退')
-    setNotice('演示已重置。你的本地进度也已清空。')
+    setNotice('演示已重置，任务勾选进度已清空。')
     try { localStorage.removeItem('campusflow:progress:v2') } catch { /* private browsing can reject storage */ }
   }
   function downloadChecklist() {
@@ -193,38 +211,52 @@ function App() {
     <div className="app-shell">
       <a className="skip-link" href="#main-content">跳到主要内容</a>
       <header className="topbar">
-        <div className="brand-lockup"><div className="brand-mark" aria-hidden="true"><Sparkles size={17} strokeWidth={2.4} /></div><div><div className="brand-name" translate="no">CampusFlow</div><div className="brand-caption">校园事务行动协同智能体</div></div></div>
-        <nav className={mobileNavOpen ? 'topnav open' : 'topnav'} aria-label="主导航"><a className="active" href="#workspace" onClick={() => setMobileNavOpen(false)}>行动工作台</a><a href="#library" onClick={() => setMobileNavOpen(false)}>知识资料</a><a href="#about" onClick={() => setMobileNavOpen(false)}>使用边界</a></nav>
-        <div className="top-actions"><span className="demo-badge"><span className="pulse-dot" />本地演示</span><button className="icon-button mobile-menu" aria-label="打开菜单" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen((value) => !value)}><Menu size={18} /></button><button className="text-button reset-button" onClick={resetDemo}>重置演示</button><button className="top-cta" onClick={runPlan} disabled={running}><Play size={14} fill="currentColor" />{running ? '规划中…' : '生成行动计划'}</button></div>
+        <a className="brand-lockup" href="#workspace" onClick={() => setView('workspace')} aria-label="CampusFlow 工作台">
+          <ClipboardCheck size={28} strokeWidth={1.8} /><div><div className="brand-name" translate="no">CampusFlow</div><div className="brand-caption">校园事务，逐件办好</div></div>
+        </a>
+        <nav className="topnav" aria-label="主导航">
+          {([['workspace', '工作台'], ['library', '资料库'], ['about', '使用说明']] as const).map(([key, label]) => <button key={key} aria-current={view === key ? 'page' : undefined} onClick={() => { setView(key); setNotice('') }}>{label}</button>)}
+        </nav>
+        <span className="demo-badge">规则演示版</span>
       </header>
-
-      <div className="app-layout">
-        <aside className="sidebar" aria-label="工作区导航">
-          <div className="workspace-switcher"><div className="workspace-avatar">C</div><div><strong>我的校园周</strong><span>通用合成校园资料</span></div><ChevronRight size={15} /></div>
-          <div className="sidebar-group"><span className="sidebar-label">工作区</span><a className="side-link active" href="#workspace"><ClipboardCheck size={16} />行动计划<span className="count-badge">{tasks.length}</span></a><a className="side-link" href="#calendar"><CalendarDays size={16} />本周日程</a><a className="side-link" href="#library"><BookOpen size={16} />知识资料<span className="count-badge soft">{allEvidence.length}</span></a></div>
-          <div className="sidebar-group sidebar-note"><span className="sidebar-label">当前状态</span><div className="privacy-card"><ShieldCheck size={17} /><div><strong>隐私边界已开启</strong><p>资料在本地演示中处理。不会自动提交或写入外部系统。</p></div></div></div>
-          <div className="sidebar-bottom"><button className="side-help"><Bell size={15} />演示提示<ChevronRight size={14} /></button><span>v0.2 · 2026.10</span></div>
-        </aside>
-
-        <main id="main-content" className="main-content">
-          <section className="workspace-header" id="workspace"><div><div className="breadcrumb"><span>CampusFlow</span><ChevronRight size={13} /><strong>行动工作台</strong></div><h1>把校园事务变成可查证的行动计划。</h1><p>CampusFlow：可查证的校园事务行动协同智能体。把通知里的截止时间、地点和材料，变成一份你能检查的计划。</p></div><div className="header-status"><span><span className="status-dot" />资料包已加载</span><span><ShieldCheck size={14} />{apiBaseUrl ? 'API 已配置' : '仅本地演示'}</span></div></section>
-          <section className="week-strip" id="calendar" aria-label="本周进度"><div className="week-intro"><span className="eyebrow">本周进度</span><strong>{completedTasks}/{tasks.length}</strong><small>项已完成</small></div><div className="week-days"><div className="week-day muted"><span>周二</span><small>10/27</small></div><div className="week-day active"><span>周三</span><small>10/28 · 今天</small><i style={{ width: Math.max(18, progress) + '%' }} /></div><div className="week-day"><span>周四</span><small>10/29</small></div><div className="week-day"><span>周五</span><small>10/30 · 截止</small></div></div><div className="week-total"><strong>{progress}%</strong><span>完成度</span></div></section>
-
-          <section className="workspace-grid" aria-label="计划工作台">
-            <section className="input-panel panel"><div className="section-heading"><div><span className="section-index">01</span><div><span className="eyebrow">输入目标</span><h2>你想完成什么？</h2></div></div><span className="quiet-tag">自然语言</span></div><label className="sr-only" htmlFor="goal-input">行动目标</label><textarea id="goal-input" name="goal" value={prompt} onChange={(event) => setPrompt(event.target.value.slice(0, 500))} placeholder="例如：我周三下午有空，帮我安排报到和报修…" /><div className="input-footer"><button className="upload-button" onClick={() => fileRef.current?.click()}><Paperclip size={15} />上传通知 / 截图</button><input ref={fileRef} type="file" accept=".txt,.png,.jpg,.jpeg,.pdf" hidden onChange={(event) => { void handleUpload(event.target.files?.[0]); event.target.value = '' }} /><span>{prompt.length}/500</span></div><div className="prompt-list"><div className="prompt-list-heading"><span>快速开始</span><span>点击填入</span></div>{quickPrompts.map((item) => <button key={item.label} onClick={() => setPrompt(item.text)}><span>{item.label}</span><ChevronRight size={14} /></button>)}</div><div className="availability-field"><div><span className="eyebrow">时间约束</span><strong>我什么时候有空？</strong></div><div className="availability-toggle" role="group" aria-label="可用时间"><button className={availability === 'afternoon' ? 'selected' : ''} onClick={() => setAvailability('afternoon')}>周三下午</button><button className={availability === 'evening' ? 'selected' : ''} onClick={() => setAvailability('evening')}>只有晚上</button></div></div><button className="primary-button generate-button" onClick={runPlan} disabled={running}>{running ? <><RefreshCw size={16} className="spin" />正在查证与规划…</> : <><Sparkles size={16} />生成我的行动计划<ArrowRight size={16} /></>}</button><p className="privacy-note"><ShieldCheck size={15} /><span>{packNotice} 当前不需要 API Key。</span></p><div className="source-sync-card"><div className="source-sync-heading"><div><span className="eyebrow"><Globe2 size={12} />官网资料</span><strong>导入官网页面</strong></div><span className={sourceSyncState === 'ready' ? 'source-sync-status ready' : 'source-sync-status'}>{sourceSyncState === 'checking' ? '检查中' : sourceSyncState === 'ready' ? '已启用' : sourceSyncState === 'unavailable' ? 'API 不可用' : '待配置'}</span></div><div className="source-sync-row"><label className="sr-only" htmlFor="source-url">官网页面地址</label><input id="source-url" type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://example.edu.cn/notice" /><button className="secondary-button" onClick={() => { void syncSourcePage() }} disabled={sourceSyncing || sourceSyncState === 'disabled'}>{sourceSyncing ? <LoaderCircle size={14} className="spin" /> : <Globe2 size={14} />}同步</button></div><p>只抓取白名单域名的单页摘要，来源会保留 URL；不会自动提交或写入学校系统。</p>{sourceSyncState === 'unavailable' && <div className="source-sync-error" role="alert">后端暂时不可用，点击同步会返回错误；本地演示仍可继续使用。</div>}{sourceSyncError && <div className="source-sync-error" role="alert">{sourceSyncError}</div>}{sourceSyncInfo && <div className="source-sync-success" role="status">{sourceSyncInfo}</div>}</div></section>
-
-            <section className="plan-panel panel"><div className="panel-topline"><div><span className="section-index">02</span><div><span className="eyebrow">Agent 规划</span><h2>{noEvidence ? '示例行动队列' : '我的行动队列'}</h2></div></div><div className="plan-head-actions"><span className="plan-mode">{modelPlanLabel}</span><button className="more-button" aria-label="取消或重新生成计划" onClick={running ? stopPlanning : runPlan}>{running ? <X size={15} /> : <RefreshCw size={15} />}</button></div></div><div className="plan-summary"><div><strong>{tasks.length} 个行动</strong><span>预计 {Math.floor(tasks.reduce((sum, task) => sum + task.duration, 0) / 60)} 小时 {tasks.reduce((sum, task) => sum + task.duration, 0) % 60} 分</span></div><div className="plan-constraint"><Clock3 size={14} />{availability === 'evening' ? '仅晚上有空' : '周三下午有空'}</div></div><div className="agent-trace" aria-label="Agent 工作阶段">{stages.map((item, index) => { const Icon = item.icon; const active = stage >= index + 1; const event = trace[index]; return <div className={active ? 'trace-item active' : 'trace-item'} key={item.label}><div className="trace-icon">{event.state === 'warning' ? <CircleAlert size={14} /> : active && stage > index + 1 ? <Check size={14} /> : <Icon size={14} />}</div><span>{item.label}</span><small>{event.detail}</small></div> })}</div>{reviewResult && <div className={'review-banner ' + reviewResult.status} role="status"><div className="review-banner-icon">{reviewResult.status === 'pass' ? <ShieldCheck size={17} /> : <CircleAlert size={17} />}</div><div className="review-banner-copy"><div className="review-banner-heading"><strong>Reviewer · {reviewerLabel}</strong><span>{reviewResult.checkedTaskIds.length} 项行动 · {reviewResult.checkedEvidenceIds.length} 条依据</span></div><p>{reviewerLead}</p>{reviewResult.findings.length > 1 && <small>还有 {reviewResult.findings.length - 1} 项检查结果，展开详情前请先人工核对。</small>}</div></div>}{noEvidence && <><div className="no-evidence-banner"><CircleAlert size={17} /><div><strong>暂未找到足够依据</strong><p>系统不会为通用问题编造校园事实。补充通知、办理事项或截止时间后再试。</p></div><div className="stale-plan-note">下面保留上一份示例计划，补充依据后再生成。</div></div></>}<div className="task-list">{schedule.map((item, index) => <TaskCard key={item.task.id} item={item} index={index} selected={selectedTask.id === item.task.id} onSelect={selectTask} onToggle={updateTaskStatus} />)}</div><div className="plan-footer"><div className="footer-stat"><strong>{completedMaterials}<small>/{totalMaterials}</small></strong><span>材料已核对</span></div><div className="footer-stat"><strong>{tasks.filter((task) => task.evidence.length).length}<small>/{tasks.length}</small></strong><span>行动有依据</span></div><button className="secondary-button" onClick={() => setExportOpen(true)}><Download size={14} />导出清单</button></div></section>
-
-            <aside className="detail-panel panel" id="detail-panel"><div className="detail-heading"><div><span className="section-index">03</span><div><span className="eyebrow">当前事项</span><h2>{selectedTask.title}</h2></div></div><span className={selectedSchedule.conflict ? 'conflict-tag' : 'ready-tag'}>{selectedSchedule.conflict ? '待协调' : '可安排'}</span></div><div className="selected-schedule"><div className="schedule-icon"><CalendarDays size={17} /></div><div><strong>{selectedSchedule.day} · {selectedSchedule.time}</strong><span><MapPin size={13} />{selectedTask.location}</span></div></div><div className="detail-reason"><Info size={15} /><p>{selectedSchedule.reason}</p></div><div className="detail-section"><div className="detail-section-title"><strong>材料清单</strong><span>{selectedTask.materials.filter((item) => item.checked).length}/{selectedTask.materials.length}</span></div><div className="material-list">{selectedTask.materials.map((item) => <label className={item.checked ? 'material-row checked' : 'material-row'} key={item.id}><input type="checkbox" checked={item.checked} onChange={() => toggleMaterial(selectedTask.id, item.id)} /><span className="check-box">{item.checked && <Check size={12} />}</span><span>{item.label}</span>{item.required ? <em>必备</em> : <em className="optional">按需</em>}</label>)}</div></div><div className="detail-section evidence-section"><div className="detail-section-title"><strong>支持这一步的依据</strong><span>{relevantEvidence.length} 条</span></div><div className="evidence-mini-list">{relevantEvidence.map((hit) => <button className={selectedEvidence.id === hit.evidence.id ? 'evidence-mini selected' : 'evidence-mini'} key={hit.evidence.id} onClick={() => setSelectedEvidenceId(hit.evidence.id)}><span className="evidence-mini-id">{hit.evidence.id}</span><span><strong>{hit.evidence.title}</strong><small>{hit.evidence.locator}</small></span><ChevronRight size={14} /></button>)}</div><button className="text-link" onClick={() => setDrawerEvidence(selectedEvidence)}><FileText size={14} />打开原文定位<ExternalLink size={13} /></button></div><div className="confirm-note"><ShieldCheck size={16} /><span>提交、写入日历和发送提醒都需要你的确认。</span></div></aside>
-          </section>
-
-          <section className="activity-panel panel" id="about"><div className="activity-heading"><div><span className="section-index">04</span><div><span className="eyebrow">可解释运行记录</span><h2>每一步都有证据，也有刹车。</h2></div></div><span className="trace-id">trace · {apiBaseUrl ? 'api-connected' : 'local-demo'}</span></div><div className="activity-grid">{trace.map((event, index) => <div className={event.state === 'warning' ? 'activity-item warning' : 'activity-item'} key={event.id}><span className="activity-number">0{index + 1}</span><div><strong>{event.label}</strong><p>{event.detail}</p></div><span className="activity-state">{event.state === 'warning' ? '需确认' : '已完成'}</span></div>)}</div><div className="activity-proof" aria-label="AI 能力证据"><div><strong>RAG</strong><span>来源定位与更新时间</span></div><div><strong>Agent</strong><span>任务拆解与时间约束</span></div><div><strong>Tools</strong><span>排期、材料和来源同步</span></div><div><strong>Reviewer</strong><span>冲突、隐私与无依据拒答</span></div></div><div className="activity-foot"><span><ShieldCheck size={14} />每个结论都能回到合成资料包中的来源。</span><span>{apiBaseUrl ? '官网摘要与 Planner 通过独立 API 服务。' : '当前使用关键词检索 + 规则排期，未调用外部模型。'}</span></div></section>
-
-          <section className="library-panel panel" id="library"><div className="library-heading"><div><span className="eyebrow">知识资料</span><h2>当前演示资料包</h2><p>{packNotice} {liveEvidence.length ? `已加入 ${liveEvidence.length} 条官网摘要。` : ''}</p></div><label className="library-search"><Search size={15} /><span className="sr-only">搜索资料</span><input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="搜索标题、主题或关键词…" /></label></div><div className="library-grid">{libraryResults.map((item) => <button className="library-card" key={item.id} onClick={() => setDrawerEvidence(item)}><div className="library-card-top"><span>{item.id}</span><small>{item.domain}</small></div><strong>{item.title}</strong><p>{item.text}</p><span className="library-card-foot">{item.locator}<ChevronRight size={13} /></span></button>)}</div></section>
-          <div className="status-toast" role="status" aria-live="polite"><span className="toast-dot" />{notice}</div>
-        </main>
-      </div>
-      <footer className="footer"><span translate="no">CampusFlow / 可查证的校园事务行动协同智能体</span><span>通用合成资料 · 本地演示</span><span><ShieldCheck size={13} />不代办，不编造</span></footer>
+      <main id="main-content" className="main-content">
+        {view === 'workspace' && <>
+          <ol className="onboarding-steps" aria-label="规划步骤">
+            {['输入事项', '选择时间', '查看清单'].map((label, index) => <li key={label} aria-current={step === index + 1 ? 'step' : undefined} className={step > index + 1 ? 'completed' : ''}><span>{step > index + 1 ? <Check size={16} /> : index + 1}</span><strong>{label}</strong></li>)}
+          </ol>
+          <header className="workspace-header">
+            <h1 id="screen-title" tabIndex={-1}>{step === 1 ? '这次，你想办什么事？' : step === 2 ? '选一个方便的时间。' : '看看接下来怎么做。'}</h1>
+            <p>{step === 1 ? '输入校园事务，整理办理步骤、材料和原文依据。' : step === 2 ? '演示使用固定样例周；时间不合适的事项会标记出来。' : '先核对安排，再逐项准备材料、查看依据或导出。'}</p>
+          </header>
+          {step === 1 && <section className="wizard-panel panel" aria-label="输入事项">
+            <label className="field-label" htmlFor="goal-input">要办的事</label>
+            <textarea id="goal-input" value={prompt} aria-invalid={Boolean(inputError)} aria-describedby={inputError ? 'goal-error' : undefined} maxLength={500} onChange={(event) => { setPrompt(event.target.value); setInputError('') }} placeholder="例如：我想领取校园卡，还要处理宿舍漏水，需要准备什么？" />
+            <div className="input-footer"><button className="upload-button" onClick={() => fileRef.current?.click()}><Paperclip size={16} />导入文本通知 (.txt)</button><span>{prompt.length}/500</span><input ref={fileRef} type="file" accept=".txt,text/plain" hidden onChange={(event) => { void handleUpload(event.target.files?.[0]); event.target.value = '' }} /></div>
+            {inputError && <p className="field-error" id="goal-error" role="alert">{inputError}</p>}
+            <div className="quick-start"><span>试试示例</span><div>{quickPrompts.map((item) => <button key={item.label} onClick={() => { setPrompt(item.text); setInputError(''); document.getElementById('goal-input')?.focus() }}>{item.label}<ArrowRight size={14} /></button>)}</div></div>
+            <details className="source-disclosure"><summary>补充官网资料（可选）<span>{sourceSyncState === 'checking' ? '检查连接中' : sourceSyncState === 'ready' ? '可同步' : sourceSyncState === 'unavailable' ? '服务不可用' : '未配置服务'}</span></summary><div className="source-sync-card"><div className="source-sync-heading"><div><span className="eyebrow"><Globe2 size={12} />官网资料</span><strong>导入官网页面</strong></div><span className={sourceSyncState === 'ready' ? 'source-sync-status ready' : 'source-sync-status'}>{sourceSyncState === 'checking' ? '检查中' : sourceSyncState === 'ready' ? '已启用' : sourceSyncState === 'unavailable' ? 'API 不可用' : '待配置'}</span></div><div className="source-sync-row"><label className="sr-only" htmlFor="source-url">官网页面地址</label><input id="source-url" type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://example.edu.cn/notice" /><button className="secondary-button" onClick={() => { void syncSourcePage() }} disabled={sourceSyncing}>{sourceSyncing ? <LoaderCircle size={14} className="spin" /> : <Globe2 size={14} />}同步</button></div><p>支持教育官网的单个页面，保留原文链接。</p>{sourceSyncState === 'unavailable' && <div className="source-sync-error" role="alert">后端暂时不可用，同步会直接报错；请稍后重试。</div>}{sourceSyncError && <div className="source-sync-error" role="alert">{sourceSyncError}</div>}{sourceSyncInfo && <div className="source-sync-success" role="status">{sourceSyncInfo}</div>}</div></details>
+            <div className="wizard-actions"><span>先用内置示例体验，资料可在资料库核对。</span><button className="primary-button" onClick={nextStep}>下一步：选择时间<ArrowRight size={16} /></button></div>
+          </section>}
+          {step === 2 && <section className="wizard-panel panel" aria-label="选择时间">
+            <div className="goal-summary"><strong>这次要办</strong><p>{prompt}</p><button className="text-button" onClick={() => setStep(1)}>修改事项</button></div>
+            <fieldset className="time-options"><legend>你什么时候方便？</legend>
+              {([['afternoon', '周三下午', '样例时间 · 14:00 开始'], ['evening', '只有晚上', '样例时间 · 19:00 开始']] as const).map(([value, label, caption]) => <label key={value} className={availability === value ? 'selected' : ''}><input type="radio" name="availability" checked={availability === value} onChange={() => setAvailability(value)} /><span><strong>{label}</strong><small>{caption}</small></span></label>)}
+            </fieldset>
+            <p className="step-note">线下窗口可能在晚上关闭，结果中会提示时间冲突。</p>
+            <div className="wizard-actions"><button className="text-button" onClick={() => setStep(1)}>上一步</button><button className="primary-button" onClick={runPlan}>生成我的行动计划<ArrowRight size={16} /></button></div>
+          </section>}
+          {step === 3 && <>
+            <div className="result-toolbar"><button className="secondary-button" onClick={() => { if (running) stopPlanning(); setStep(2) }}>返回调整</button><span>{completedTasks}/{tasks.length} 项已完成 · {modelPlanLabel}</span><button className="text-button" onClick={resetDemo}>重置演示</button></div>
+            {running && <div className="running-status" role="status"><LoaderCircle className="spin" size={18} />{stages[Math.min(Math.max(stage - 1, 0), stages.length - 1)].label}<button className="text-button" onClick={stopPlanning}>取消</button></div>}
+            <div className="workspace-grid">            <section className="plan-panel panel"><div className="panel-topline"><div><div><h2>{noEvidence ? '未找到匹配事项' : '示例行动清单'}</h2></div></div><div className="plan-head-actions"><button className="more-button" aria-label="取消或重新生成计划" onClick={running ? stopPlanning : runPlan}>{running ? <X size={15} /> : <RefreshCw size={15} />}</button></div></div><div className="plan-summary"><div><strong>{tasks.length} 个行动</strong><span>预计 {Math.floor(tasks.reduce((sum, task) => sum + task.duration, 0) / 60)} 小时 {tasks.reduce((sum, task) => sum + task.duration, 0) % 60} 分</span></div><div className="plan-constraint"><Clock3 size={14} />{availability === 'evening' ? '仅晚上有空' : '周三下午有空'}</div></div>{reviewResult && <div className={'review-banner ' + reviewResult.status} role="status"><div className="review-banner-icon">{reviewResult.status === 'pass' ? <ShieldCheck size={17} /> : <CircleAlert size={17} />}</div><div className="review-banner-copy"><div className="review-banner-heading"><strong>核对结果 · {reviewerLabel}</strong><span>{reviewResult.checkedTaskIds.length} 项行动 · {reviewResult.checkedEvidenceIds.length} 条依据</span></div><p>{reviewerLead}</p>{reviewResult.findings.length > 1 && <small>还有 {reviewResult.findings.length - 1} 项检查结果，展开详情前请先人工核对。</small>}</div></div>}{noEvidence && <><div className="no-evidence-banner"><CircleAlert size={17} /><div><strong>暂未找到足够依据</strong><p>系统不会为通用问题编造校园事实。补充通知、办理事项或截止时间后再试。</p></div><div className="stale-plan-note">下面保留上一份示例计划，补充依据后再生成。</div></div></>}<p className="result-disclosure">以下来自内置合成资料，仍是规则演示，不代表官网生成的计划。</p><div className="task-list">{schedule.map((item, index) => <TaskCard key={item.task.id} item={item} index={index} selected={selectedTask.id === item.task.id} onSelect={selectTask} onToggle={updateTaskStatus} />)}</div><div className="plan-footer"><div className="footer-stat"><strong>{completedMaterials}<small>/{totalMaterials}</small></strong><span>材料已核对</span></div><div className="footer-stat"><strong>{tasks.filter((task) => task.evidence.length).length}<small>/{tasks.length}</small></strong><span>行动有依据</span></div><button className="secondary-button" onClick={() => setExportOpen(true)}><Download size={14} />导出清单</button></div></section>            <aside className="detail-panel panel" id="detail-panel"><div className="detail-heading"><div><div><span className="eyebrow">所选事项 · 材料与依据</span><h2>{selectedTask.title}</h2></div></div><span className={selectedSchedule.conflict ? 'conflict-tag' : 'ready-tag'}>{selectedSchedule.conflict ? '待协调' : '可安排'}</span></div><div className="selected-schedule"><div className="schedule-icon"><CalendarDays size={17} /></div><div><strong>{selectedSchedule.day} · {selectedSchedule.time}</strong><span><MapPin size={13} />{selectedTask.location}</span></div></div><div className="detail-reason"><Info size={15} /><p>{selectedSchedule.reason}</p></div><div className="detail-section"><div className="detail-section-title"><strong>材料清单</strong><span>{selectedTask.materials.filter((item) => item.checked).length}/{selectedTask.materials.length}</span></div><div className="material-list">{selectedTask.materials.map((item) => <label className={item.checked ? 'material-row checked' : 'material-row'} key={item.id}><input type="checkbox" checked={item.checked} onChange={() => toggleMaterial(selectedTask.id, item.id)} /><span className="check-box">{item.checked && <Check size={12} />}</span><span>{item.label}</span>{item.required ? <em>必备</em> : <em className="optional">按需</em>}</label>)}</div></div><div className="detail-section evidence-section"><div className="detail-section-title"><strong>支持这一步的依据</strong><span>{relevantEvidence.length} 条</span></div><div className="evidence-mini-list">{relevantEvidence.map((hit) => <button className={selectedEvidence.id === hit.evidence.id ? 'evidence-mini selected' : 'evidence-mini'} key={hit.evidence.id} onClick={() => setSelectedEvidenceId(hit.evidence.id)}><span className="evidence-mini-id">{hit.evidence.id}</span><span><strong>{hit.evidence.title}</strong><small>{hit.evidence.locator}</small></span><ChevronRight size={14} /></button>)}</div><button className="text-link" onClick={() => setDrawerEvidence(selectedEvidence)}><FileText size={14} />打开原文定位<ExternalLink size={13} /></button></div><div className="confirm-note"><ShieldCheck size={16} /><span>提交、写入日历和发送提醒都需要你的确认。</span></div></aside></div>
+            <details className="process-disclosure"><summary>查看规划与核对过程</summary>          <section className="activity-panel panel" id="about"><div className="activity-heading"><div><div><h2>每一步都能回到依据。</h2></div></div><span className="trace-id">trace · {sourceSyncState === 'ready' ? 'source-api-ready' : 'local-demo'}</span></div><div className="activity-grid">{trace.map((event, index) => <div className={event.state === 'warning' ? 'activity-item warning' : 'activity-item'} key={event.id}><span className="activity-number">0{index + 1}</span><div><strong>{event.label}</strong><p>{event.detail}</p></div><span className="activity-state">{event.state === 'warning' ? '需确认' : '已完成'}</span></div>)}</div><div className="activity-foot"><span><ShieldCheck size={14} />每个结论都能回到合成资料包中的来源。</span><span>{modelPlanLabel}</span></div></section></details>
+          </>}
+        </>}
+        {view === 'library' && <><header className="workspace-header"><h1 id="screen-title" tabIndex={-1}>资料库</h1><p>查看计划使用的依据，点击资料可读原文。</p></header>          <section className="library-panel panel" id="library"><div className="library-heading"><div><h2>可用资料</h2><p>{packNotice} {liveEvidence.length ? `已加入 ${liveEvidence.length} 条官网摘要。` : ''}</p></div><label className="library-search"><Search size={15} /><span className="sr-only">搜索资料</span><input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="搜索标题、主题或关键词…" /></label></div>{libraryResults.length === 0 && <p role="status">没有找到相关资料，换个关键词试试。</p>}<div className="library-grid">{libraryResults.map((item) => <button className="library-card" key={item.id} onClick={() => setDrawerEvidence(item)}><div className="library-card-top"><span>{item.id}</span><small>{item.domain}</small></div><strong>{item.title}</strong><p>{item.text}</p><span className="library-card-foot">{item.locator}<ChevronRight size={13} /></span></button>)}</div></section></>}
+        {view === 'about' && <><header className="workspace-header"><h1 id="screen-title" tabIndex={-1}>使用说明</h1><p>知道它能做什么，也知道结果从哪里来。</p></header><section className="about-panel panel"><h2>从一件事开始</h2><p>填写事项，选择时间，再核对清单。任务进度仅保存在这台设备。</p><h2>当前是规则演示</h2><p>校园卡、宿舍报修、奖助材料使用通用合成校园资料，不代表任何学校官方通知。计划尚未由真实模型生成。</p><h2>资料导入的范围</h2><p>支持读取文本通知；官网同步需后端可用，连接失败会显示错误。图片与 PDF 解析暂未开放。</p><h2>执行前由你确认</h2><p>可以核对材料、打开原文定位、导出清单。系统不会替你提交申请或联系学校；仍需要人工确认。</p></section></>}
+        {notice && <div className="status-toast" role="status" aria-live="polite">{notice}</div>}
+      </main>
+      <footer className="footer"><span>CampusFlow · 通用合成资料演示</span><span>核对来源，再开始行动。</span></footer>
       {drawerEvidence && <EvidenceDrawer item={drawerEvidence} onClose={() => setDrawerEvidence(null)} />}
       {exportOpen && <ExportModal schedule={schedule} availability={availability} onClose={() => setExportOpen(false)} onConfirm={downloadChecklist} />}
     </div>
