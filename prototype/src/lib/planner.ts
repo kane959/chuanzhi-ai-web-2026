@@ -27,7 +27,8 @@ export function matchTaskIds(query: string): string[] {
 }
 
 export function scheduleTasks(tasks: Task[], availability: Availability): ScheduledTask[] {
-  let cursor = availability === 'evening' ? 19 * 60 : 14 * 60
+  let cursor = availability === 'morning' ? 9 * 60 : availability === 'evening' ? 19 * 60 : availability === 'weekend' ? 10 * 60 : 14 * 60
+  const day = availability === 'weekend' ? '周六' : '周三'
   const format = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
   return tasks.map((task) => {
     if (task.kind === 'onsite' && availability === 'evening') {
@@ -38,7 +39,7 @@ export function scheduleTasks(tasks: Task[], availability: Availability): Schedu
     }
     const start = cursor
     cursor += task.duration + 15
-    return { task, day: '周三', time: `${format(start)}–${format(start + task.duration)}`, conflict: false,
+    return { task, day, time: `${format(start)}–${format(start + task.duration)}`, conflict: false,
       reason: task.kind === 'onsite' ? '安排在窗口开放期间；额外预留 15 分钟缓冲。' : '线上工单可全天填写，不受现场窗口限制（E-03）。' }
   })
 }
