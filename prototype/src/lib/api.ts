@@ -11,7 +11,7 @@ export async function fetchApi(path: string, init: RequestInit = {}, timeoutMs =
     return await fetch(apiUrl(path), { ...init, signal: controller.signal })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw new Error('后端请求超时，请稍后重试。')
-    throw new Error('后端暂时不可用，请检查 Vercel 服务状态。')
+    throw new Error('后端暂时不可用，请检查后端服务状态。')
   } finally {
     window.clearTimeout(timer)
   }
