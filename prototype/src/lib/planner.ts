@@ -48,9 +48,6 @@ export function scheduleTasks(tasks: Task[], availability: Availability, customT
       const timeLabel = availability === 'custom' ? `${format(cursor)} 后` : '19:00 后'
       return { task, day: '待协调', time: '需要调整时段', conflict: true, reason: `当前自定义时段无法完整容纳该事项（${timeLabel}；可用至 ${customEnd}）。校园卡窗口在 17:00 关闭（E-02），请调整星期或时间范围。` }
     }
-    if (task.id === 'grant') {
-      return { task, day: '周四', time: '19:00–20:00', conflict: false, reason: '材料准备可在线完成；预留周五 17:00 截止前的核对时间（E-07）。' }
-    }
     const start = cursor
     cursor += task.duration + 15
     return { task, day, time: `${format(start)}–${format(start + task.duration)}`, conflict: false,
