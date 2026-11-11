@@ -8,8 +8,10 @@ export function callWindowTool({ taskIds = [], availability = 'afternoon', custo
   const ids = [...new Set(taskIds.filter((id) => WINDOWS[id]))]
   const result = ids.map((id) => {
     const item = WINDOWS[id]
-    const conflict = id === 'card' && (availability === 'evening' || (availability === 'custom' && customTime >= '17:00'))
-    return { ...item, conflict, reason: conflict ? `当前 ${customTime} 已超过 17:00 关闭时间` : '当前时段可继续核对' }
+    const parts = String(customTime).split('|')
+    const day = parts[0] || '周三'; const start = parts[1] || customTime; const end = parts[2] || '18:00'
+    const conflict = id === 'card' && (availability === 'evening' || (availability === 'custom' && (start >= '17:00' || end <= start)))
+    return { ...item, conflict, reason: conflict ? `当前 ${day} ${start}–${end} 无法在 17:00 前完成` : '当前时段可继续核对' }
   })
   return { name: 'window_lookup', status: 'success', input: { taskIds: ids, availability, customTime }, result }
 }

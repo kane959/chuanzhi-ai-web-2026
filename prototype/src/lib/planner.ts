@@ -27,7 +27,7 @@ export function matchTaskIds(query: string): string[] {
 }
 
 function customTimeMinutes(value: string) {
-  const match = /^(\d{2}):(\d{2})$/.exec(value)
+  const match = /(?:^|\|)(\d{2}):(\d{2})(?:\||$)/.exec(value)
   if (!match) return 14 * 60
   const hours = Number(match[1]); const minutes = Number(match[2])
   return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59 ? hours * 60 + minutes : 14 * 60
@@ -35,13 +35,18 @@ function customTimeMinutes(value: string) {
 
 export function scheduleTasks(tasks: Task[], availability: Availability, customTime = '14:00'): ScheduledTask[] {
   let cursor = availability === 'morning' ? 9 * 60 : availability === 'evening' ? 19 * 60 : availability === 'weekend' ? 10 * 60 : availability === 'custom' ? customTimeMinutes(customTime) : 14 * 60
-  const day = availability === 'weekend' ? '周六' : '周三'
+  const customParts = customTime.split('|')
+  const customDay = customParts[0] || '周三'
+  const customEnd = customParts[2] || '18:00'
+  const endMinutes = customTimeMinutes(customEnd)
+  const day = availability === 'weekend' ? '周六' : availability === 'custom' ? customDay : '周三'
   const format = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
   return tasks.map((task) => {
-    const onsiteOutsideWindow = task.kind === 'onsite' && (availability === 'evening' || (availability === 'custom' && cursor >= 17 * 60))
-    if (onsiteOutsideWindow) {
+    const outsideCustomWindow = availability === 'custom' && cursor + task.duration > endMinutes
+    const onsiteOutsideWindow = task.kind === 'onsite' && (availability === 'evening' || (availability === 'custom' && (cursor >= 17 * 60 || outsideCustomWindow)))
+    if (outsideCustomWindow || onsiteOutsideWindow) {
       const timeLabel = availability === 'custom' ? `${format(cursor)} 后` : '19:00 后'
-      return { task, day: '待协调', time: '需要白天时段', conflict: true, reason: `你的空闲时间在 ${timeLabel}，校园卡窗口在 17:00 关闭（E-02）。请另选白天时段。` }
+      return { task, day: '待协调', time: '需要调整时段', conflict: true, reason: `当前自定义时段无法完整容纳该事项（${timeLabel}；可用至 ${customEnd}）。校园卡窗口在 17:00 关闭（E-02），请调整星期或时间范围。` }
     }
     if (task.id === 'grant') {
       return { task, day: '周四', time: '19:00–20:00', conflict: false, reason: '材料准备可在线完成；预留周五 17:00 截止前的核对时间（E-07）。' }
@@ -95,7 +100,8 @@ export function reviewPlan(query: string, tasks: Task[], schedule: ScheduledTask
 }
 
 export function createChecklist(schedule: ScheduledTask[], availability: Availability, customTime = '14:00'): string {
-  const constraint = availability === 'evening' ? '仅晚上有空' : availability === 'weekend' ? '周末有空' : availability === 'custom' ? `自定义时间 ${customTime} 有空` : availability === 'morning' ? '上午有空' : '周三下午有空'
+  const customParts = customTime.split('|')
+  const constraint = availability === 'evening' ? '仅晚上有空' : availability === 'weekend' ? '周末有空' : availability === 'custom' ? `自定义时间 ${customParts[0] || '周三'} ${customParts[1] || '16:00'}–${customParts[2] || '18:00'} 有空` : availability === 'morning' ? '上午有空' : '周三下午有空'
   return [
     '# CampusFlow 行动清单', '',
     '通用合成校园资料，仅供体验，不代表任何学校官方通知。',

@@ -99,6 +99,8 @@ textarea::placeholder, input::placeholder { color: var(--muted-2); }
 .custom-time-option.selected { border-color: var(--green); background: #f4f8f5; }
 .custom-time-option > label { display: flex; gap: 12px; align-items: center; flex: 1; min-width: 150px; cursor: pointer; }
 .custom-time-option > label > span { flex: 1; }
+.custom-time-fields { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.custom-time-fields select { min-height: 48px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 10px 12px; background: white; color: var(--ink); font: inherit; font-size: 16px; cursor: pointer; }
 .custom-time-option:focus-visible { outline: 3px solid rgba(31, 111, 83, .28); outline-offset: 2px; }
 .custom-time-input { flex: 0 0 168px; width: 168px; min-height: 48px; box-sizing: border-box; border: 1px solid var(--line-strong); border-radius: 8px; padding: 10px 12px; color: var(--ink); background: white; font: inherit; font-size: 16px; cursor: pointer; }
 .custom-time-input:focus-visible { outline: 3px solid rgba(31, 111, 83, .28); outline-offset: 2px; border-color: var(--green); }

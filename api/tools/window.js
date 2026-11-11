@@ -9,8 +9,9 @@ export default function handler(req, res) {
   const taskIds = [...new Set((Array.isArray(body.taskIds) ? body.taskIds : []).filter((id) => WINDOWS[id]))]
   const result = taskIds.map((id) => {
     const item = WINDOWS[id]
-    const conflict = id === 'card' && (body.availability === 'evening' || (body.availability === 'custom' && String(body.customTime ?? '') >= '17:00'))
-    return { ...item, conflict, reason: conflict ? `当前 ${body.customTime} 已超过 17:00 关闭时间` : '当前时段可继续核对' }
+    const parts = String(body.customTime ?? '').split('|'); const day = parts[0] || '周三'; const start = parts[1] || body.customTime; const end = parts[2] || '18:00'
+    const conflict = id === 'card' && (body.availability === 'evening' || (body.availability === 'custom' && (start >= '17:00' || end <= start)))
+    return { ...item, conflict, reason: conflict ? `当前 ${day} ${start}–${end} 无法在 17:00 前完成` : '当前时段可继续核对' }
   })
   return res.status(200).json({ ok: true, tool: { name: 'window_lookup', status: 'success', input: { taskIds, availability: body.availability, customTime: body.customTime }, result } })
 }
