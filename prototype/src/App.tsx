@@ -285,9 +285,9 @@ function App() {
             <div className="goal-summary"><strong>这次要办</strong><p>{prompt}</p><button className="text-button" onClick={() => setStep(1)}>修改事项</button></div>
             <fieldset className="time-options"><legend>你什么时候方便？</legend>
               {([['morning', '工作日上午', '样例时间 · 09:00 开始'], ['afternoon', '工作日下午', '样例时间 · 14:00 开始'], ['evening', '工作日晚上', '样例时间 · 19:00 开始'], ['weekend', '周末', '样例时间 · 周六 10:00 开始']] as const).map(([value, label, caption]) => <label key={value} className={availability === value ? 'selected' : ''}><input type="radio" name="availability" checked={availability === value} onChange={() => setAvailability(value)} /><span><strong>{label}</strong><small>{caption}</small></span></label>)}
-              <div className={availability === 'custom' ? 'custom-time-option selected' : 'custom-time-option'}>
-                <label><input type="radio" name="availability" checked={availability === 'custom'} onChange={() => setAvailability('custom')} /><span><strong>自定义时间</strong><small>按你实际方便的时间排期</small></span></label>
-                <input className="custom-time-input" type="time" value={customTime} aria-label="自定义时间" onChange={(event) => { setCustomTime(event.target.value || '16:00'); setAvailability('custom') }} />
+              <div className={availability === 'custom' ? 'custom-time-option selected' : 'custom-time-option'} role="group" aria-label="自定义时间" onClick={() => setAvailability('custom')} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setAvailability('custom') } }} tabIndex={0}>
+                <label onClick={(event) => event.stopPropagation()}><input type="radio" name="availability" checked={availability === 'custom'} onChange={() => setAvailability('custom')} /><span><strong>自定义时间</strong><small>点击卡片或时间框即可启用</small></span></label>
+                <input className="custom-time-input" type="time" value={customTime} aria-label="自定义时间" onFocus={() => setAvailability('custom')} onClick={(event) => event.stopPropagation()} onChange={(event) => { setCustomTime(event.target.value || '16:00'); setAvailability('custom') }} />
               </div>
             </fieldset>
             <p className="step-note">如果选择的时间不适合线下窗口，结果会明确标出冲突和原因。添加材料后会自动标记为已准备。</p>
