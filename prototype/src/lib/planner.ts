@@ -44,9 +44,12 @@ export function scheduleTasks(tasks: Task[], availability: Availability, customT
   return tasks.map((task) => {
     const outsideCustomWindow = availability === 'custom' && cursor + task.duration > endMinutes
     const onsiteOutsideWindow = task.kind === 'onsite' && (availability === 'evening' || (availability === 'custom' && (cursor >= 17 * 60 || outsideCustomWindow)))
-    if (outsideCustomWindow || onsiteOutsideWindow) {
+    if (onsiteOutsideWindow) {
       const timeLabel = availability === 'custom' ? `${format(cursor)} 后` : '19:00 后'
-      return { task, day: '待协调', time: '需要调整时段', conflict: true, reason: `当前自定义时段无法完整容纳该事项（${timeLabel}；可用至 ${customEnd}）。校园卡窗口在 17:00 关闭（E-02），请调整星期或时间范围。` }
+      return { task, day: '待协调', time: '需要调整时段', conflict: true, reason: `${task.title} 需要在线下窗口开放时间内办理；当前时段从 ${timeLabel} 开始，校园卡窗口在 17:00 关闭（E-02），请调整星期或时间范围。` }
+    }
+    if (outsideCustomWindow) {
+      return { task, day: '待协调', time: '需要调整时段', conflict: true, reason: `当前自定义时段无法完整容纳${task.title}（预计从 ${format(cursor)} 开始，可用至 ${customEnd}）。请延长可用时间范围或调整星期。` }
     }
     const start = cursor
     cursor += task.duration + 15
