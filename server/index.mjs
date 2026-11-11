@@ -4,6 +4,8 @@ import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { allowedHostsFromEnv, publicConfig, syncSource } from './source-sync.mjs'
 import { createPlan, publicModelConfig } from './model-adapter.mjs'
+import { callWindowTool } from './tools.mjs'
+import { schoolAgent } from './school-agent.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const distRoot = join(root, 'prototype', 'dist')
@@ -48,6 +50,11 @@ const server = createServer(async (req, res) => {
     if (req.method === 'OPTIONS') { res.writeHead(204); return res.end() }
   }
   if (requestUrl.pathname === '/api/health') return json(res, 200, { ok: true, service: 'campusflow-api', sourceSync: publicConfig(), model: publicModelConfig() })
+  if (requestUrl.pathname === '/api/school') {
+    if (req.method !== 'POST') return json(res, 405, { error: '只支持 POST。' })
+    try { return json(res, 200, { ok: true, ...await schoolAgent(await readBody(req)) }) }
+    catch (error) { return json(res, 400, { ok: false, error: error.message }) }
+  }
   if (requestUrl.pathname === '/api/plan') {
     if (req.method !== 'POST') return json(res, 405, { error: '只支持 POST。' })
     try {
@@ -55,6 +62,13 @@ const server = createServer(async (req, res) => {
       if (typeof body.goal !== 'string' || !body.goal.trim()) return json(res, 400, { ok: false, error: '缺少 goal。' })
       return json(res, 200, { ok: true, plan: await createPlan(body) })
     } catch (error) { return json(res, 400, { ok: false, error: error instanceof Error ? error.message : '规划失败。' }) }
+  }
+  if (requestUrl.pathname === '/api/tools/window') {
+    if (req.method !== 'POST') return json(res, 405, { error: '只支持 POST。' })
+    try {
+      const body = await readBody(req)
+      return json(res, 200, { ok: true, tool: callWindowTool(body) })
+    } catch (error) { return json(res, 400, { ok: false, error: error instanceof Error ? error.message : '工具调用失败。' }) }
   }
   if (requestUrl.pathname === '/api/sources') {
     if (req.method === 'GET') return json(res, 200, publicConfig())

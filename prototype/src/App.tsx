@@ -8,6 +8,7 @@ import { evidence, initialTasks, packNotice, quickPrompts } from './data'
 import { createChecklist, matchTaskIds, missingRequired, retrieveEvidence, reviewPlan, scheduleTasks } from './lib/planner'
 import { restoreProgress, saveProgress } from './lib/storage'
 import { apiBaseUrl, fetchApi } from './lib/api'
+import { SchoolSearch } from './SchoolSearch'
 import type { Availability, Evidence, RetrievalHit, ReviewResult, ScheduledTask, Task, TraceEvent } from './types'
 
 const stages = [
@@ -37,6 +38,8 @@ function App() {
   const [sourceSyncFailure, setSourceSyncFailure] = useState('')
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null)
   const [modelPlanLabel, setModelPlanLabel] = useState('演示规则 · 可回退')
+  const [toolEvent, setToolEvent] = useState<{ name: string; status: string; result?: unknown } | null>(null)
+  const [modelSummary, setModelSummary] = useState('')
   const [hasRun, setHasRun] = useState(false)
   const [noEvidence, setNoEvidence] = useState(false)
   const [notice, setNotice] = useState('')
@@ -160,13 +163,20 @@ function App() {
     timerRefs.current.forEach((timer) => window.clearTimeout(timer))
     setRetrievalHits(hits); setReviewResult(review); setHasRun(true); setNoEvidence(hits.length === 0 || matchedTaskIds.length === 0)
     setModelPlanLabel('结构化 Planner · 连接中')
-    void fetchApi('/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: prompt, availability, customTime, evidence: hits.map((hit) => ({ id: hit.evidence.id, title: hit.evidence.title, excerpt: hit.evidence.text })) }) })
+    setToolEvent(null)
+    const taskIds = matchedTaskIds
+    void fetchApi('/api/tools/window', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskIds, availability, customTime }) })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('tool unavailable')))
+      .then((payload: { tool?: { name: string; status: string; result?: unknown } }) => { if (requestId === planRequest.current && payload.tool) setToolEvent(payload.tool) })
+      .catch(() => { if (requestId === planRequest.current) setToolEvent({ name: 'window_lookup', status: 'fallback' }) })
+    void fetchApi('/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: prompt, availability, customTime, evidence: hits.map((hit) => ({ id: hit.evidence.id, title: hit.evidence.title, excerpt: hit.evidence.text })), toolResult: { taskIds, availability, customTime } }) })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('planner unavailable')))
-      .then((payload: { plan?: { mode?: string; model?: string; fallbackReason?: string } }) => {
+      .then((payload: { plan?: { mode?: string; model?: string; summary?: string; fallbackReason?: string } }) => {
         if (requestId !== planRequest.current) return
         const plan = payload.plan
         if (!plan) throw new Error('planner unavailable')
         setModelPlanLabel(plan.mode === 'provider' ? `真实模型 · ${plan.model ?? '兼容接口'}` : `演示 Planner · ${plan.model ?? '本地规则'}`)
+        setModelSummary(plan.summary ?? '')
         setNotice(plan.fallbackReason ? `真实模型暂不可用，已安全回退演示模式：${plan.fallbackReason}` : '结构化 Planner 已返回结果，Reviewer 仍是最终闸门。')
       })
       .catch((error) => {
@@ -187,13 +197,31 @@ function App() {
   }
   async function handleUpload(file?: File) {
     if (!file) return
-    if (file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt')) {
+    if (file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md')) {
       const text = await file.text()
-      setPrompt(text.slice(0, 500)); setNotice('已读取 ' + file.name + ' 的文本内容。你仍可以编辑后再生成计划。')
+      await ingestNotice(file.name, text)
       return
     }
-    setPrompt('请解析这份材料：' + file.name)
-    setNotice('已记录文件名。当前版本只对文本通知做本地读取，图片/PDF 解析会在后续版本接入。')
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const text = extractPdfText(bytes)
+      if (text.length < 20) { setNotice('PDF 未提取到可读文字。请使用文字型 PDF，扫描件可先 OCR 后再导入。'); return }
+      await ingestNotice(file.name, text)
+      return
+    }
+    setNotice('目前支持文字型 PDF、TXT 和 Markdown 通知；图片 OCR 尚未启用。')
+  }
+  async function ingestNotice(fileName: string, text: string) {
+    const clean = text.replace(/\s+/g, ' ').trim().slice(0, 5000)
+    const id = `UPLOAD-${Date.now().toString(36).toUpperCase()}`
+    const doc: Evidence = { id, title: fileName, domain: '本地上传资料', source: fileName, locator: '文件正文 · 本地解析', updated: new Date().toISOString().slice(0, 10), text: clean.slice(0, 900), paragraphs: clean.split(/(?<=[。！？.!?])/).filter(Boolean).slice(0, 8), keywords: ['通知', ...['校园卡', '报修', '宿舍', '奖助', '材料', '窗口', '截止'].filter((term) => clean.includes(term))], taskIds: matchTaskIds(clean) }
+    setLiveEvidence((current) => [doc, ...current.filter((item) => item.source !== fileName)])
+    setSelectedEvidenceId(id); setPrompt(clean.slice(0, 500)); setNotice(`已解析 ${fileName}：正文已进入证据库，生成计划时会参与召回、工具检查和 Reviewer 审核。`)
+  }
+  function extractPdfText(bytes: Uint8Array) {
+    const raw = new TextDecoder('latin1').decode(bytes)
+    const strings = [...raw.matchAll(/\(([^()\\]*(?:\\.[^()\\]*)*)\)/g)].map((match) => match[1].replace(/\\([()\\])/g, '$1')).filter((value) => /[\u4e00-\u9fffA-Za-z0-9]/.test(value))
+    return strings.join(' ').replace(/\s+/g, ' ').trim()
   }
   function resetDemo() {
     timerRefs.current.forEach((timer) => window.clearTimeout(timer))
@@ -201,7 +229,7 @@ function App() {
     setRunning(false); setStep(1); setView('workspace'); setInputError('')
     setTasks(initialTasks); setPrompt(''); setAvailability('afternoon'); setCustomTime('16:00'); setMaterialFiles({}); setStage(0)
     setRetrievalHits([]); setReviewResult(null); setHasRun(false); setNoEvidence(false); setSelectedTaskId('repair'); setSelectedEvidenceId('E-03')
-    setLiveEvidence([]); setSourceUrl(''); setSourceSyncError(''); setSourceSyncInfo(''); setSourceSyncFailure(''); setModelPlanLabel('演示规则 · 可回退')
+    setLiveEvidence([]); setSourceUrl(''); setSourceSyncError(''); setSourceSyncInfo(''); setSourceSyncFailure(''); setModelPlanLabel('演示规则 · 可回退'); setToolEvent(null); setModelSummary('')
     setNotice('演示已重置，任务勾选进度已清空。')
     try { localStorage.removeItem('campusflow:progress:v2') } catch { /* private browsing can reject storage */ }
   }
@@ -215,7 +243,7 @@ function App() {
   const trace: TraceEvent[] = [
     { id: 'parse', label: '理解目标', detail: '提取事项与时间约束', state: 'done' },
     { id: 'retrieve', label: '召回依据', detail: hasRun ? retrievalHits.length + ' 条资料' : '等待输入', state: noEvidence ? 'warning' : 'done' },
-    { id: 'schedule', label: '排期检查', detail: availability === 'morning' ? '检测上午窗口' : availability === 'evening' ? '检测晚间窗口' : availability === 'weekend' ? '检测周末安排' : availability === 'custom' ? `检测 ${customTime} 自定义时段` : '检查下午窗口', state: schedule.some((item) => item.conflict) ? 'warning' : 'done' },
+    { id: 'schedule', label: '工具调用 · window_lookup', detail: toolEvent ? `${toolEvent.status === 'success' ? 'tool_result 已返回' : '工具不可用，已回退'} · 查询窗口与排期约束` : '等待调用办事窗口工具', state: toolEvent?.status === 'fallback' ? 'warning' : toolEvent ? 'done' : 'done' },
     { id: 'review', label: 'Reviewer 审核', detail: reviewResult ? (reviewResult.status === 'pass' ? '基础检查通过' : reviewResult.status === 'blocked' ? '阻止确定性结论' : '需要人工确认') : '等待运行', state: reviewResult?.status === 'pass' ? 'done' : reviewResult ? 'warning' : 'done' },
     { id: 'confirm', label: '等待确认', detail: '导出前由你决定', state: 'done' },
   ]
@@ -244,9 +272,10 @@ function App() {
             <p>{step === 1 ? '输入校园事务，整理办理步骤、材料和原文依据。' : step === 2 ? '演示使用固定样例周；时间不合适的事项会标记出来。' : '先核对安排，再逐项准备材料、查看依据或导出。'}</p>
           </header>
           {step === 1 && <section className="wizard-panel panel" aria-label="输入事项">
+            <SchoolSearch onImport={(documents) => setLiveEvidence(current => [...documents, ...current.filter(item => !documents.some(doc => doc.id === item.id))])} />
             <label className="field-label" htmlFor="goal-input">要办的事</label>
             <textarea id="goal-input" value={prompt} aria-invalid={Boolean(inputError)} aria-describedby={inputError ? 'goal-error' : undefined} maxLength={500} onChange={(event) => { setPrompt(event.target.value); setInputError('') }} placeholder="例如：我想领取校园卡，还要处理宿舍漏水，需要准备什么？" />
-            <div className="input-footer"><button className="upload-button" onClick={() => fileRef.current?.click()}><Paperclip size={16} />导入文本通知 (.txt)</button><span>{prompt.length}/500</span><input ref={fileRef} type="file" accept=".txt,text/plain" hidden onChange={(event) => { void handleUpload(event.target.files?.[0]); event.target.value = '' }} /></div>
+            <div className="input-footer"><button className="upload-button" onClick={() => fileRef.current?.click()}><Paperclip size={16} />导入通知 (.pdf / .txt / .md)</button><span>{prompt.length}/500</span><input ref={fileRef} type="file" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" hidden onChange={(event) => { void handleUpload(event.target.files?.[0]); event.target.value = '' }} /></div>
             {inputError && <p className="field-error" id="goal-error" role="alert">{inputError}</p>}
             <div className="quick-start"><span>试试示例</span><div>{quickPrompts.map((item) => <button key={item.label} onClick={() => { setPrompt(item.text); setInputError(''); document.getElementById('goal-input')?.focus() }}>{item.label}<ArrowRight size={14} /></button>)}</div></div>
             <details className="source-disclosure"><summary>补充官网资料（可选）<span>{sourceSyncState === 'checking' ? '检查连接中' : sourceSyncState === 'ready' ? '可同步' : sourceSyncState === 'unavailable' ? '服务不可用' : '未配置服务'}</span></summary><div className="source-sync-card"><div className="source-sync-heading"><div><span className="eyebrow"><Globe2 size={12} />官网资料</span><strong>导入官网页面</strong></div><span className={sourceSyncState === 'ready' ? 'source-sync-status ready' : 'source-sync-status'}>{sourceSyncState === 'checking' ? '检查中' : sourceSyncState === 'ready' ? '已启用' : sourceSyncState === 'unavailable' ? 'API 不可用' : '待配置'}</span></div><div className="source-sync-row"><label className="sr-only" htmlFor="source-url">官网页面地址</label><input id="source-url" type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://example.edu.cn/notice" /><button className="secondary-button" onClick={() => { void syncSourcePage() }} disabled={sourceSyncing}>{sourceSyncing ? <LoaderCircle size={14} className="spin" /> : <Globe2 size={14} />}同步</button></div><p>支持教育官网的单个页面，保留原文链接。</p>{sourceSyncState === 'unavailable' && !sourceSyncError && <div className="source-sync-error" role="alert">后端暂时不可用，同步暂时无法使用。</div>}{sourceSyncError && <div className="source-sync-error" role="alert"><strong>{sourceSyncFailure || '同步失败'}</strong><span> · </span>{sourceSyncError}</div>}{sourceSyncInfo && <div className="source-sync-success" role="status">{sourceSyncInfo}</div>}</div></details>
@@ -256,7 +285,10 @@ function App() {
             <div className="goal-summary"><strong>这次要办</strong><p>{prompt}</p><button className="text-button" onClick={() => setStep(1)}>修改事项</button></div>
             <fieldset className="time-options"><legend>你什么时候方便？</legend>
               {([['morning', '工作日上午', '样例时间 · 09:00 开始'], ['afternoon', '工作日下午', '样例时间 · 14:00 开始'], ['evening', '工作日晚上', '样例时间 · 19:00 开始'], ['weekend', '周末', '样例时间 · 周六 10:00 开始']] as const).map(([value, label, caption]) => <label key={value} className={availability === value ? 'selected' : ''}><input type="radio" name="availability" checked={availability === value} onChange={() => setAvailability(value)} /><span><strong>{label}</strong><small>{caption}</small></span></label>)}
-              <label className={availability === 'custom' ? 'selected custom-time-option' : 'custom-time-option'}><input type="radio" name="availability" checked={availability === 'custom'} onChange={() => setAvailability('custom')} /><span><strong>自定义时间</strong><small>按你实际方便的时间排期</small></span><input className="custom-time-input" type="time" value={customTime} aria-label="自定义时间" onClick={(event) => event.stopPropagation()} onChange={(event) => { setCustomTime(event.target.value || '16:00'); setAvailability('custom') }} /></label>
+              <div className={availability === 'custom' ? 'custom-time-option selected' : 'custom-time-option'}>
+                <label><input type="radio" name="availability" checked={availability === 'custom'} onChange={() => setAvailability('custom')} /><span><strong>自定义时间</strong><small>按你实际方便的时间排期</small></span></label>
+                <input className="custom-time-input" type="time" value={customTime} aria-label="自定义时间" onChange={(event) => { setCustomTime(event.target.value || '16:00'); setAvailability('custom') }} />
+              </div>
             </fieldset>
             <p className="step-note">如果选择的时间不适合线下窗口，结果会明确标出冲突和原因。添加材料后会自动标记为已准备。</p>
             <div className="wizard-actions"><button className="text-button" onClick={() => setStep(1)}>上一步</button><button className="primary-button" onClick={runPlan}>生成我的行动计划<ArrowRight size={16} /></button></div>
@@ -265,11 +297,11 @@ function App() {
             <div className="result-toolbar"><button className="secondary-button" onClick={() => { if (running) stopPlanning(); setStep(2) }}>返回调整</button><span>{completedTasks}/{tasks.length} 项已完成 · {modelPlanLabel}</span><button className="text-button" onClick={resetDemo}>重置演示</button></div>
             {running && <div className="running-status" role="status"><LoaderCircle className="spin" size={18} />{stages[Math.min(Math.max(stage - 1, 0), stages.length - 1)].label}<button className="text-button" onClick={stopPlanning}>取消</button></div>}
             <div className="workspace-grid">            <section className="plan-panel panel"><div className="panel-topline"><div><div><h2>{noEvidence ? '未找到匹配事项' : '示例行动清单'}</h2></div></div><div className="plan-head-actions"><button className="more-button" aria-label="取消或重新生成计划" onClick={running ? stopPlanning : runPlan}>{running ? <X size={15} /> : <RefreshCw size={15} />}</button></div></div><div className="plan-summary"><div><strong>{tasks.length} 个行动</strong><span>预计 {Math.floor(tasks.reduce((sum, task) => sum + task.duration, 0) / 60)} 小时 {tasks.reduce((sum, task) => sum + task.duration, 0) % 60} 分</span></div><div className="plan-constraint"><Clock3 size={14} />{availability === 'morning' ? '上午有空' : availability === 'evening' ? '仅晚上有空' : availability === 'weekend' ? '周末有空' : availability === 'custom' ? `${customTime} 有空` : '下午有空'}</div></div>{reviewResult && <div className={'review-banner ' + reviewResult.status} role="status"><div className="review-banner-icon">{reviewResult.status === 'pass' ? <ShieldCheck size={17} /> : <CircleAlert size={17} />}</div><div className="review-banner-copy"><div className="review-banner-heading"><strong>核对结果 · {reviewerLabel}</strong><span>{reviewResult.checkedTaskIds.length} 项行动 · {reviewResult.checkedEvidenceIds.length} 条依据</span></div><p>{reviewerLead}</p>{reviewResult.findings.length > 1 && <small>还有 {reviewResult.findings.length - 1} 项检查结果，展开详情前请先人工核对。</small>}</div></div>}{noEvidence && <><div className="no-evidence-banner"><CircleAlert size={17} /><div><strong>暂未找到足够依据</strong><p>系统不会为通用问题编造校园事实。补充通知、办理事项或截止时间后再试。</p></div><div className="stale-plan-note">下面保留上一份示例计划，补充依据后再生成。</div></div></>}<p className="result-disclosure">以下来自内置合成资料，仍是规则演示，不代表官网生成的计划。</p><div className="task-list">{schedule.map((item, index) => <TaskCard key={item.task.id} item={item} index={index} selected={selectedTask.id === item.task.id} onSelect={selectTask} onToggle={updateTaskStatus} />)}</div><div className="plan-footer"><div className="footer-stat"><strong>{completedMaterials}<small>/{totalMaterials}</small></strong><span>材料已核对</span></div><div className="footer-stat"><strong>{tasks.filter((task) => task.evidence.length).length}<small>/{tasks.length}</small></strong><span>行动有依据</span></div><button className="secondary-button" onClick={() => setExportOpen(true)}><Download size={14} />导出清单</button></div></section>            <aside className="detail-panel panel" id="detail-panel"><div className="detail-heading"><div><div><span className="eyebrow">所选事项 · 材料与依据</span><h2>{selectedTask.title}</h2></div></div><span className={selectedSchedule.conflict ? 'conflict-tag' : 'ready-tag'}>{selectedSchedule.conflict ? '待协调' : '可安排'}</span></div><div className="selected-schedule"><div className="schedule-icon"><CalendarDays size={17} /></div><div><strong>{selectedSchedule.day} · {selectedSchedule.time}</strong><span><MapPin size={13} />{selectedTask.location}</span></div></div><div className="detail-reason"><Info size={15} /><p>{selectedSchedule.reason}</p></div><div className="detail-section"><div className="detail-section-title"><strong>材料清单</strong><span>{selectedTask.materials.filter((item) => item.checked).length}/{selectedTask.materials.length}</span></div><div className="material-list">{selectedTask.materials.map((item) => { const materialKey = `${selectedTask.id}:${item.id}`; const fileName = materialFiles[materialKey]; return <div className="material-item" key={item.id}><label className={item.checked ? 'material-row checked' : 'material-row'}><input type="checkbox" checked={item.checked} onChange={() => toggleMaterial(selectedTask.id, item.id)} /><span className="check-box">{item.checked && <Check size={12} />}</span><span>{item.label}</span>{item.required ? <em>必备</em> : <em className="optional">按需</em>}</label><button type="button" className="material-add" onClick={() => materialFileRefs.current[materialKey]?.click()}>{fileName ? '更换材料' : '添加材料'}</button><input ref={(element) => { materialFileRefs.current[materialKey] = element }} type="file" className="sr-only" aria-label={`添加${item.label}`} onChange={(event) => { addMaterial(selectedTask.id, item.id, event.target.files?.[0]); event.target.value = '' }} />{fileName && <span className="material-file-name" title={fileName}>{fileName}</span>}</div> })}</div></div><div className="detail-section evidence-section"><div className="detail-section-title"><strong>支持这一步的依据</strong><span>{relevantEvidence.length} 条</span></div><div className="evidence-mini-list">{relevantEvidence.map((hit) => <button className={selectedEvidence.id === hit.evidence.id ? 'evidence-mini selected' : 'evidence-mini'} key={hit.evidence.id} onClick={() => setSelectedEvidenceId(hit.evidence.id)}><span className="evidence-mini-id">{hit.evidence.id}</span><span><strong>{hit.evidence.title}</strong><small>{hit.evidence.locator}</small></span><ChevronRight size={14} /></button>)}</div><button className="text-link" onClick={() => setDrawerEvidence(selectedEvidence)}><FileText size={14} />打开原文定位<ExternalLink size={13} /></button></div><div className="confirm-note"><ShieldCheck size={16} /><span>提交、写入日历和发送提醒都需要你的确认。</span></div></aside></div>
-            <details className="process-disclosure"><summary>查看规划与核对过程</summary>          <section className="activity-panel panel" id="about"><div className="activity-heading"><div><div><h2>每一步都能回到依据。</h2></div></div><span className="trace-id">trace · {sourceSyncState === 'ready' ? 'source-api-ready' : 'local-demo'}</span></div><div className="activity-grid">{trace.map((event, index) => <div className={event.state === 'warning' ? 'activity-item warning' : 'activity-item'} key={event.id}><span className="activity-number">0{index + 1}</span><div><strong>{event.label}</strong><p>{event.detail}</p></div><span className="activity-state">{event.state === 'warning' ? '需确认' : '已完成'}</span></div>)}</div><div className="activity-foot"><span><ShieldCheck size={14} />每个结论都能回到合成资料包中的来源。</span><span>{modelPlanLabel}</span></div></section></details>
+            <details className="process-disclosure"><summary>查看规划与核对过程</summary>          <section className="activity-panel panel" id="about"><div className="activity-heading"><div><div><h2>每一步都能回到依据。</h2></div></div><span className="trace-id">trace · {sourceSyncState === 'ready' ? 'source-api-ready' : 'local-demo'}</span></div><div className="activity-grid">{trace.map((event, index) => <div className={event.state === 'warning' ? 'activity-item warning' : 'activity-item'} key={event.id}><span className="activity-number">0{index + 1}</span><div><strong>{event.label}</strong><p>{event.detail}</p></div><span className="activity-state">{event.state === 'warning' ? '需确认' : '已完成'}</span></div>)}</div><div className="activity-foot"><span><ShieldCheck size={14} />每个结论都能回到合成资料包中的来源。</span><span>{modelPlanLabel}{modelSummary ? ` · ${modelSummary}` : ''}</span></div></section></details>
           </>}
         </>}
         {view === 'library' && <><header className="workspace-header"><h1 id="screen-title" tabIndex={-1}>资料库</h1><p>查看计划使用的依据，点击资料可读原文。</p></header>          <section className="library-panel panel" id="library"><div className="library-heading"><div><h2>可用资料</h2><p>{packNotice} {liveEvidence.length ? `已加入 ${liveEvidence.length} 条官网摘要。` : ''}</p></div><label className="library-search"><Search size={15} /><span className="sr-only">搜索资料</span><input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="搜索标题、主题或关键词…" /></label></div>{libraryResults.length === 0 && <p role="status">没有找到相关资料，换个关键词试试。</p>}<div className="library-grid">{libraryResults.map((item) => <button className="library-card" key={item.id} onClick={() => setDrawerEvidence(item)}><div className="library-card-top"><span>{item.id}</span><small>{item.domain}</small></div><strong>{item.title}</strong><p>{item.text}</p><span className="library-card-foot">{item.locator}<ChevronRight size={13} /></span></button>)}</div></section></>}
-        {view === 'about' && <><header className="workspace-header"><h1 id="screen-title" tabIndex={-1}>使用说明</h1><p>知道它能做什么，也知道结果从哪里来。</p></header><section className="about-panel panel"><h2>从一件事开始</h2><p>填写事项，选择时间，再核对清单。任务进度仅保存在这台设备。</p><h2>当前是规则演示</h2><p>校园卡、宿舍报修、奖助材料使用通用合成校园资料，不代表任何学校官方通知。计划尚未由真实模型生成。</p><h2>资料导入的范围</h2><p>支持读取文本通知；官网同步需后端可用，连接失败会显示错误。图片与 PDF 解析暂未开放。</p><h2>执行前由你确认</h2><p>可以核对材料、打开原文定位、导出清单。系统不会替你提交申请或联系学校；仍需要人工确认。</p></section></>}
+        {view === 'about' && <><header className="workspace-header"><h1 id="screen-title" tabIndex={-1}>使用说明</h1><p>知道它能做什么，也知道结果从哪里来。</p></header><section className="about-panel panel"><h2>从一件事开始</h2><p>填写事项，再导入文字型 PDF 或文本通知，选择时间，最后核对清单。</p><h2>当前是规则演示，可接真实模型</h2><p>校园卡、宿舍报修、奖助材料使用通用合成资料；配置服务端模型后，结构化 Planner 会使用同一批证据和工具结果，失败时安全回退。</p><h2>资料导入范围</h2><p>支持文字型 PDF、TXT 和 Markdown 通知；解析结果会进入本次证据库。当前内置资料是通用合成校园资料。扫描图片需先 OCR，官网同步需后端可用。</p><h2>执行前由你确认</h2><p>可以核对材料、打开原文定位、查看 tool_call 与 tool_result、导出清单。系统不会替你提交申请或联系学校。</p></section></>}
         {notice && <div className="status-toast" role="status" aria-live="polite">{notice}</div>}
       </main>
       <footer className="footer"><span>CampusFlow · 通用合成资料演示</span><span>核对来源，再开始行动。</span></footer>
@@ -294,7 +326,4 @@ function ExportModal({ schedule, availability, customTime, onClose, onConfirm }:
 }
 
 export default App
-
-
-
 

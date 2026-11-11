@@ -143,7 +143,10 @@ export async function syncSource(rawUrl, { allowedHosts = allowedHostsFromEnv(),
       keywords: inferKeywords(text, title),
       taskIds: inferTaskIds(text),
     }
-    return { document, fetchedBytes: bytes, fetchedAt: new Date().toISOString() }
+    const links = [...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)].flatMap((m) => {
+      try { const target = new URL(decodeEntities(m[1]), url); return target.origin === url.origin && !target.hash && /通知|公告|学生|教务|办事|服务|资助/.test(cleanText(m[2])) ? [{ url: target.href, title: cleanText(m[2]) }] : [] } catch { return [] }
+    }).slice(0, 20)
+    return { document, links, fetchedBytes: bytes, fetchedAt: new Date().toISOString() }
   } catch (error) {
     if (error?.name === 'AbortError') throw new Error('官网响应超时（8 秒），请稍后重试。')
     throw error

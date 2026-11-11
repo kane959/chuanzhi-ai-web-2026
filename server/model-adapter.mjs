@@ -19,6 +19,7 @@ function demoPlan(input) {
     planner: '目标解析 → 证据召回 → 工具检查 → Reviewer',
     summary: sourceCount ? '已基于可核验资料生成候选行动计划。' : '没有足够依据，保留人工核对入口。',
     requiresApproval: true,
+    toolEvents: input.toolResult ? [{ name: 'window_lookup', status: 'success', result: input.toolResult }] : [],
   }
 }
 
@@ -42,8 +43,8 @@ async function callCompatible(config, input, fetchImpl = fetch) {
         temperature: 0.1,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: '你是 CampusFlow 的 Planner。只输出 JSON：summary、tasks、risks、requiresApproval。不得编造证据；每个 task 必须含 title、evidenceIds、requiresApproval。' },
-          { role: 'user', content: JSON.stringify({ goal: input.goal, availability: input.availability, evidence: input.evidence }) },
+          { role: 'system', content: '你是 CampusFlow 的 Planner。只输出 JSON：summary、tasks、risks、requiresApproval。不得编造证据；每个 task 必须含 title、evidenceIds、requiresApproval。只能使用给定 evidence 和 toolResult。' },
+          { role: 'user', content: JSON.stringify({ goal: input.goal, availability: input.availability, evidence: input.evidence, toolResult: input.toolResult }) },
         ],
       }),
     })
@@ -51,8 +52,8 @@ async function callCompatible(config, input, fetchImpl = fetch) {
     const payload = await response.json()
     const content = payload?.choices?.[0]?.message?.content
     const parsed = typeof content === 'string' ? extractJson(content) : null
-    if (!parsed || !Array.isArray(parsed.tasks)) throw new Error('模型返回未通过结构化计划校验。')
-    return { mode: 'provider', provider: config.provider, model: config.model, ...parsed, requiresApproval: true }
+    if (!parsed || !Array.isArray(parsed.tasks) || parsed.tasks.some((task) => typeof task?.title !== 'string' || !Array.isArray(task?.evidenceIds) || task.requiresApproval !== true)) throw new Error('模型返回未通过结构化计划校验。')
+    return { mode: 'provider', provider: config.provider, model: config.model, ...parsed, requiresApproval: true, toolEvents: input.toolResult ? [{ name: 'window_lookup', status: 'success', result: input.toolResult }] : [] }
   } catch (error) {
     if (error?.name === 'AbortError') throw new Error('模型响应超时（12 秒）。')
     throw error

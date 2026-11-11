@@ -75,6 +75,10 @@ type AgentEvent =
 
 当前服务端提供单页预览接口：`POST /api/sources`，请求体为 `{ "url": "https://..." }`。它只允许 `SYNC_ALLOWED_HOSTS` 中的 HTTPS/HTTP 域名，拒绝回环/内网地址、非标准端口、带用户名密码的 URL、超过 512 KB 的响应和超过 8 秒的请求。正文提取为标题、段落、更新时间、来源 URL 和关键词后返回给前端；默认不写入数据库，前端只在当前会话加入“待核验证据”。
 
+前端也支持导入文字型 PDF、TXT 和 Markdown 通知。文字型 PDF 在浏览器端提取可读文本，生成带文件名、解析日期和正文定位的 `UPLOAD-*` 证据；扫描 PDF 或图片需要先经过 OCR，无法提取文字时会明确提示，不会把文件名冒充解析结果。
+
+`POST /api/tools/window` 是演示用白名单工具。它只接受任务 ID、可用时段和自定义时间，返回窗口开放时间、地点和冲突结果。前端把 `tool_call`、`tool_result` 和 Reviewer 结果放在同一条规划时间线中；工具失败时回退到本地排期规则。
+
 Vercel 部署使用 `api/health.js` 和 `api/sources.js`；本地长驻服务使用 `pnpm server`。生产环境还应在平台侧配置速率限制、日志脱敏和明确的域名授权，不能把它当成任意 URL 代理或全网爬虫。
 
 ## 结构化模型适配层
